@@ -33,13 +33,13 @@ fi
 
 # Install git packages
 echo "Installing packages..."
-pi install git:github.com/nicobailon/pi-subagents 2>/dev/null || echo "  pi-subagents already installed"
-pi install git:github.com/nicobailon/pi-mcp-adapter 2>/dev/null || echo "  pi-mcp-adapter already installed"
-pi install git:github.com/nicobailon/pi-powerline-footer 2>/dev/null || echo "  pi-powerline-footer already installed"
-pi install git:github.com/HazAT/pi-smart-sessions 2>/dev/null || echo "  pi-smart-sessions already installed"
-pi install git:github.com/omaclaren/pi-markdown-preview 2>/dev/null || echo "  pi-markdown-preview already installed"
-pi install git:github.com/aliou/pi-guardrails 2>/dev/null || echo "  pi-guardrails already installed"
-pi install git:github.com/arosstale/pi-notify 2>/dev/null || echo "  pi-notify already installed"
+pi install git:github.com/nicobailon/pi-subagents
+pi install git:github.com/nicobailon/pi-mcp-adapter
+pi install git:github.com/nicobailon/pi-powerline-footer
+pi install git:github.com/HazAT/pi-smart-sessions
+pi install git:github.com/omaclaren/pi-markdown-preview
+pi install git:github.com/aliou/pi-guardrails
+pi install git:github.com/arosstale/pi-notify
 echo ""
 
 echo "✅ Setup complete!"
