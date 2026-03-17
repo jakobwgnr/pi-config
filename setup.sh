@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-EXPECTED_DIR="$HOME/.pi/agent"
+EXPECTED_DIR="~/.pi/agent"
 
 echo "⚠️  This repo should be cloned to ~/.pi/agent/"
 echo "Setting up pi-config at $EXPECTED_DIR"
