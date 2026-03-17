@@ -163,15 +163,16 @@ You can execute slash commands yourself using the `execute_command` tool:
 
 | Agent | Purpose | Model |
 |-------|---------|-------|
-| `scout` | Fast codebase reconnaissance | Haiku (fast, cheap) |
-| `worker` | Implements tasks from todos, makes polished commits (always using the `commit` skill), and closes the todo | Sonnet 4.6 |
-| `reviewer` | Reviews code for quality/security | Codex 5.3 |
-| `researcher` | Deep research using parallel.ai tools (web search, extraction, synthesis) + Claude Code for code analysis | Sonnet 4.6 |
-| `planner` | Interactive brainstorming and planning — clarifies requirements, explores approaches, writes plans, creates todos | Opus 4.6 (medium thinking) |
+| `scout` | Fast codebase reconnaissance | gpt-4.1 |
+| `worker` | Implements tasks from todos, makes polished commits (always using the `commit` skill), and closes the todo | gpt-4.1 |
+| `reviewer` | Reviews code for quality/security | gpt-5.4 |
+| `researcher` | Deep research using parallel.ai tools as primary, Claude Code as fallback for code analysis | gpt-5.4 |
+| `planner` | Interactive brainstorming and planning — clarifies requirements, explores approaches, writes plans, creates todos | gpt-5.4 (medium thinking) |
+| `visual-tester` | Visual QA for web UIs using Chrome CDP tooling | gpt-4.1 |
 
 #### Subagents
 
-Subagents spawn visible pi sessions in cmux terminals. The user can watch progress in real-time and optionally interact. Autonomous agents call `subagent_done` to self-terminate.
+Subagents spawn visible pi sessions the user can watch in real time and optionally interact with. Autonomous agents call `subagent_done` to self-terminate.
 
 The `agent` parameter loads defaults from `~/.pi/agent/agents/<name>.md`. Model, tools, skills, thinking — all inherited. Explicit params override agent defaults.
 
@@ -245,5 +246,7 @@ Skills provide specialized instructions for specific tasks. Load them when the c
 | Asked to simplify/clean up/refactor code | `code-simplifier` |
 | Reading, reviewing, or analyzing a pi session JSONL file | `session-reader` |
 | Adding or configuring an MCP server (global or project-local) | `add-mcp-server` |
+| Asked to plan, brainstorm, or design before implementation | `plan` |
+| Asked to create or scaffold a new skill | `skill-creator` |
 
 **The `commit` skill is mandatory for every single commit.** No quick `git commit -m "fix stuff"` — every commit gets the full treatment with a descriptive subject and body.

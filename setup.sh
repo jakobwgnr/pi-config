@@ -17,7 +17,12 @@ if [ ! -f "$EXPECTED_DIR/settings.json" ]; then
   "packages": [
     "git:github.com/nicobailon/pi-subagents",
     "git:github.com/nicobailon/pi-mcp-adapter",
-    "git:github.com/HazAT/pi-smart-sessions"
+    "git:github.com/nicobailon/pi-powerline-footer",
+    "git:github.com/HazAT/pi-smart-sessions",
+    "git:github.com/omaclaren/pi-markdown-preview",
+    "git:github.com/aliou/pi-guardrails",
+    "git:github.com/arosstale/pi-notify",
+    "git:github.com/pasky/chrome-cdp-skill"
   ],
   "hideThinkingBlock": false
 }
@@ -27,7 +32,12 @@ else
   echo "Make sure your packages list includes:"
   echo '  "git:github.com/nicobailon/pi-subagents"'
   echo '  "git:github.com/nicobailon/pi-mcp-adapter"'
+  echo '  "git:github.com/nicobailon/pi-powerline-footer"'
   echo '  "git:github.com/HazAT/pi-smart-sessions"'
+  echo '  "git:github.com/omaclaren/pi-markdown-preview"'
+  echo '  "git:github.com/aliou/pi-guardrails"'
+  echo '  "git:github.com/arosstale/pi-notify"'
+  echo '  "git:github.com/pasky/chrome-cdp-skill"'
   echo ""
 fi
 
@@ -40,6 +50,7 @@ pi install git:github.com/HazAT/pi-smart-sessions
 pi install git:github.com/omaclaren/pi-markdown-preview
 pi install git:github.com/aliou/pi-guardrails
 pi install git:github.com/arosstale/pi-notify
+pi install git:github.com/pasky/chrome-cdp-skill
 echo ""
 
 echo "✅ Setup complete!"

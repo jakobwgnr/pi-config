@@ -1,181 +1,311 @@
 ---
 name: plan
-description: >
-  Planning workflow. Spawns an interactive planner sub-agent Use when asked to "plan",
-  "brainstorm", "I want to build X", or "let's design". Requires the
-  subagents extension.
+description: |
+  Structured planning for creating robust plans:
+  investigate → clarify → explore → validate design → write plan → create todos.
+  No shortcuts.
 ---
 
 # Plan
 
-A planning workflow that offloads brainstorming and plan creation to a dedicated interactive subagent, keeping the main session clean for orchestration.
+A structured brainstorming session for turning ideas into validated designs.
 
-**Announce at start:** "Let me investigate first, then I'll open a dedicated planning session where we can work through this together."
+**Your deliverable is a PLAN and TODOS. Not code. Not implementation.**
+
+You may write code to explore or validate an idea — but you never implement the feature. That's for workers.
+
+**Announce at start:** "Starting a brainstorming session. Let me investigate first, then we'll work through this step by step."
 
 ---
 
-## Tab Titles
+## ⚠️ MANDATORY: No Skipping Without Permission
 
-Update the title at every phase transition.
+**You MUST follow all phases.** Your judgment that something is "simple" or "straightforward" is NOT sufficient to skip steps. Even a counter app gets the full treatment: clarify → explore → design → plan → todos.
 
-| Phase         | Title example                                                  |
-| ------------- | -------------------------------------------------------------- |
-| Investigation | `🔍 Investigating: <short task>`                               |
-| Planning      | `💬 Planning: <short task>`                                    |
-| Review plan   | `📋 Review: <short task>`                                      |
-| Executing     | `🔨 Executing: 1/3 — <short task>` (update counter per worker) |
-| Reviewing     | `🔎 Reviewing: <short task>`                                   |
-| Done          | `✅ Done: <short task>`                                        |
+The ONLY exception: The user explicitly says something like:
+- "Skip the plan, just implement it"
+- "Just do it quickly"
+- "No need for the full process"
 
-Name subagents with context too:
+If the user hasn't said this, you follow the full flow. Period.
 
-- Scout: `"🔍 Scout"` (default is fine)
-- Workers: `"🔨 Worker 1/3"`, `"🔨 Worker 2/3"`, etc.
-- Reviewer: `"🔎 Reviewer"`
-- Planner: `"💬 Planner"`
+**You will be tempted to skip.** You'll think "this is just a small thing" or "this is obvious." That's exactly when the process matters most. Do NOT write "This is straightforward enough that I'll implement it directly" — that's the one thing you must never do.
+
+---
+
+## ⚠️ THE MOST IMPORTANT RULE
+
+**When you ask a question or present options: STOP. End your message. Wait for the user to reply.**
+
+Do NOT do this:
+> "Does that sound right? ... I'll assume yes and move on."
+
+Do NOT do this:
+> "This is straightforward enough. Let me build it."
+
+DO this:
+> "Does that match what you're after? Anything to add or adjust?"
+> [END OF MESSAGE — wait for user]
+
+**If you catch yourself writing "I'll assume...", "Moving on to...", or "Let me implement..." — STOP. Delete it. End the message at the question.**
 
 ---
 
 ## The Flow
 
 ```
-Phase 1: Quick Investigation (main session)
+Phase 1: Investigate Context
     ↓
-Phase 2: Spawn Planner Subagent (interactive — user collaborates here)
+Phase 2: Clarify Requirements  → ASK, then STOP and wait
     ↓
-Phase 3: Review Plan & Todos (main session)
+Phase 3: Explore Approaches    → PRESENT, then STOP and wait
     ↓
-Phase 4: Execute Todos (workers)
+Phase 4: Present & Validate Design → section by section, wait between each
     ↓
-Phase 5: Review
+Phase 5: Write Plan            → only after user confirms design
+    ↓
+Phase 6: Create Todos          → only after plan is written
+    ↓
+Phase 7: Summarize & Exit      → only after todos are created
 ```
 
 ---
 
-## Phase 1: Quick Investigation
+## 🛑 Focus on Planning
 
-Before spawning the planner, orient yourself:
+Your primary job is to create a robust plan and todos. If you need to explore or prototype something to inform the plan, that's fine — but the deliverable is the plan and todos, not working code.
+
+---
+
+## Phase 1: Investigate Context
+
+Before asking questions, explore what exists:
 
 ```bash
+# Get the lay of the land
 ls -la
 find . -type f -name "*.ts" | head -20  # or relevant extension
-cat package.json 2>/dev/null | head -30
+cat package.json 2>/dev/null | head -30  # or equivalent
 ```
 
-Spend 30–60 seconds. The goal is to give the planner useful context — not to do a full scout.
+**Look for:**
+- File structure and conventions
+- Related existing code
+- Tech stack, dependencies
+- Patterns already in use
 
-**If deeper context is needed** (large codebase, unfamiliar architecture), spawn an autonomous scout subagent first:
-
-```typescript
-subagent({
-  name: "Scout",
-  agent: "scout",
-  interactive: false,
-  task: "Analyze the codebase. Map file structure, key modules, patterns, and conventions. Summarize findings concisely for a planning session.",
-});
-```
-
-Read the scout's summary from the subagent result before proceeding.
+**After investigating, share what you found:**
+> "Here's what I see in the codebase: [brief summary]. Now let me understand what you're looking to build."
 
 ---
 
-## Phase 2: Spawn Planner Subagent
+## Phase 2: Clarify Requirements
 
-Spawn the interactive planner. The `planner` agent definition has the full brainstorming workflow built in — clarify, explore, validate design, write plan, create todos.
+Work through requirements **one topic at a time**:
 
-```typescript
-subagent({
-  name: "Planner",
-  agent: "planner",
-  interactive: true,
-  task: `Plan: [what the user wants to build]
+### Topics to Cover
 
-Context from investigation:
-[paste relevant findings from Phase 1 here]`,
-});
-```
+1. **Purpose** — What problem does this solve? Who's it for?
+2. **Scope** — What's in? What's explicitly out?
+3. **Constraints** — Performance, compatibility, timeline?
+4. **Success criteria** — How do we know it's done?
 
-**The user works with the planner in the subagent.** The main session waits. When the user is done, they press Ctrl+D and the subagent.s summary is returned to the main session.
+### How to Ask
 
----
+- Group related questions — then **always run `/answer`** so the user gets a clean Q&A interface:
+  ```
+  [list your questions]
+  execute_command(command="/answer", reason="Opening Q&A for requirements")
+  ```
+- Prefer multiple choice when possible (easier to answer)
+- Share what you already know from context — don't re-ask obvious things
 
-## Phase 3: Review Plan & Todos
+After each round of answers, either:
+- Ask follow-up questions (and run `/answer` again)
+- Summarize your understanding and confirm: "So we're building X that does Y for Z. Right?"
 
-Once the subagent closes, read the plan and todos:
-
-```typescript
-todo({ action: "list" });
-```
-
-Review with the user:
-
-> "Here's what the planner produced: [brief summary]. Ready to execute, or anything to adjust?"
+**Don't move to Phase 3 until requirements are clear. Ask, run `/answer`, then STOP and wait.**
 
 ---
 
-## Phase 4: Execute Todos
+## Phase 3: Explore Approaches
 
-Spawn a scout first for context, then workers sequentially:
+**Only start this after the user has confirmed requirements.**
 
-```typescript
-// 1. Scout gathers context
-subagent({
-  name: "Scout",
-  agent: "scout",
-  interactive: false,
-  task: "Gather context for implementing [feature]. Read the plan at [plan path]. Identify all files that will be created/modified, map existing patterns and conventions.",
-});
+Propose 2-3 approaches:
 
-// 2. Workers execute todos sequentially — one at a time
-subagent({
-  name: "Worker",
-  agent: "worker",
-  interactive: false,
-  task: "Implement TODO-xxxx. Mark the todo as done. Plan: [plan path]\n\nScout context: [paste scout summary]",
-});
+> "A few ways we could approach this:
+> 
+> 1. **Simple approach** — [description]. Pros/cons.
+> 2. **Flexible approach** — [description]. Pros/cons.
+> 3. **Hybrid** — [description]. Pros/cons.
+> 
+> I'd lean toward #2 because [reason]. What do you think?"
 
-// Check result, then next todo
-subagent({
-  name: "Worker",
-  agent: "worker",
-  interactive: false,
-  task: "Implement TODO-yyyy. Mark the todo as done. Plan: [plan path]\n\nScout context: [paste scout summary]",
-});
-```
+**Lead with your recommendation. Be explicit about tradeoffs. YAGNI ruthlessly.**
 
-**Always run workers sequentially in the same git repo** — parallel workers will conflict on commits.
+**Ask for their take, then STOP and wait.**
 
 ---
 
-## Phase 5: Review
+## Phase 4: Present & Validate Design
 
-After all todos are complete:
+**Only start this after the user has picked an approach.**
 
-```typescript
-subagent({
-  name: "Reviewer",
-  agent: "reviewer",
-  interactive: false,
-  task: "Review the recent changes. Plan: [plan path]",
-});
-```
+Present the design **in sections**, validating each before moving on. Keep each section to 200-300 words.
 
-Triage findings:
+#### Section 1: Architecture Overview
+Present high-level structure, then ask:
+> "Does this architecture make sense for what we're building?"
 
-- **P0** — Real bugs, security issues → fix now
-- **P1** — Genuine traps, maintenance dangers → fix before merging
-- **P2** — Minor issues → fix if quick, note otherwise
-- **P3** — Nits → skip
+**STOP and wait for response before continuing.**
 
-Create todos for P0/P1, run workers to fix, re-review only if fixes were substantial.
+#### Section 2: Components / Modules
+Break down the pieces, then ask:
+> "These are the main components. Anything missing or unnecessary?"
+
+#### Section 3: Data Flow
+How data moves through the system.
+
+#### Section 4: Error Handling & Edge Cases
+How we handle failures.
+
+**Not every project needs all sections** — use judgment based on complexity. But always validate architecture before proceeding.
 
 ---
 
-## ⚠️ Completion Checklist
+## Phase 5: Write Plan
 
-Before reporting done:
+**Only start this after the user confirms the design.**
 
-1. ✅ All worker todos closed?
-2. ✅ Every todo has a polished commit (using the `commit` skill)?
-3. ✅ Reviewer has run?
-4. ✅ Reviewer findings triaged and addressed?
+Use `write_artifact` to save the plan:
+
+```
+write_artifact(name: "plans/YYYY-MM-DD-<name>.md", content: "...")
+```
+
+### Plan Structure
+
+```markdown
+# [Plan Name]
+
+**Date:** YYYY-MM-DD
+**Status:** Draft
+**Directory:** /path/to/project
+
+## Overview
+
+[What we're building and why — 2-3 sentences]
+
+## Goals
+
+- Goal 1
+- Goal 2
+- Goal 3
+
+## Approach
+
+[High-level technical approach]
+
+### Key Decisions
+
+- Decision 1: [choice] — because [reason]
+- Decision 2: [choice] — because [reason]
+
+### Architecture
+
+[Structure, components, how pieces fit together]
+
+## Dependencies
+
+- Libraries needed
+- Tools required
+
+## Risks & Open Questions
+
+- Risk 1
+- Open question 1
+```
+
+After writing, briefly confirm:
+> "Plan is written. Ready to create the todos, or anything you want to adjust?"
+
+---
+
+## Phase 6: Create Todos
+
+After the plan is confirmed, break it into todos.
+
+### Make Todos Bite-Sized
+
+Each todo = **one focused action** (2-5 minutes).
+
+❌ Too big: "Implement authentication system"
+
+✅ Granular:
+- "Create `src/auth/types.ts` with User and Session types"
+- "Write failing test for `validateToken` function"
+- "Implement `validateToken` to make test pass"
+
+### Creating Todos
+
+```
+todo(action: "create", title: "Task 1: [description]", tags: ["plan-name"], body: "...")
+```
+
+**Todo body includes:**
+```markdown
+Plan: [plan artifact path]
+
+## Task
+[What needs to be done]
+
+## Files
+- path/to/file.ts (create)
+- path/to/other.ts (modify)
+
+## Details
+[Specific implementation notes]
+
+## Acceptance Criteria
+- [ ] Criterion 1
+- [ ] Criterion 2
+```
+
+---
+
+## Phase 7: Summarize & Exit
+
+Your **FINAL message** must include:
+- Plan artifact path
+- Number of todos created with their IDs
+- Key decisions made
+- Any open questions remaining
+
+If running in a panel: "Plan and todos are ready. Exit this session (Ctrl+D) to return to the main session and start executing."
+
+---
+
+## Tips for Good Brainstorming
+
+### Don't Rush Big Problems
+
+Signs it's too big for one pass:
+- Multiple independent subsystems or domains
+- More than ~10 todos would come out of it
+- Tradeoffs that deserve dedicated discussion
+
+Propose splitting into focused chunks.
+
+### Read the Room
+- If they have a clear vision → validate rather than over-question
+- If they're eager to start → move faster through phases (but still hit all phases)
+- If they're uncertain → spend more time exploring
+
+### Be Opinionated
+- "I'd suggest X because Y" is more helpful than "What do you want?"
+- It's okay to push back if something seems off
+
+### Keep It Focused
+- One topic at a time
+- Parking lot items for later: "Good thought — let's note that for v2"

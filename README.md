@@ -33,7 +33,7 @@ cd ~/.pi/agent && git pull
 
 ## Architecture
 
-This config uses **subagents** — visible pi sessions spawned in cmux terminals. Each subagent is a full pi session with its own identity, tools, and skills. The user can watch agents work in real-time and interact when needed.
+This config uses **subagents** — visible pi sessions with their own identity, tools, and skills. The user can watch agents work in real time and interact when needed.
 
 ### Key Concepts
 
@@ -55,6 +55,9 @@ Specialized roles with baked-in identity, workflow, and review rubrics.
 | **worker** | gpt-4.1 | Implements tasks from todos, commits with polished messages |
 | **reviewer** | gpt-5.4 | Reviews code for quality, security, correctness (review rubric baked in) |
 | **researcher** | gpt-5.4 | Deep research using parallel.ai tools + Claude Code for code analysis |
+| **visual-tester** | gpt-4.1 | Visual QA for web UIs using Chrome CDP tooling |
+
+`agents/autoresearch.md` is present as an experimental agent definition, but it depends on custom experiment tools that are not provisioned by this repo.
 
 ## Skills
 
@@ -69,18 +72,32 @@ Loaded on-demand when the context matches.
 | **session-reader** | Reading and analyzing pi session JSONL files |
 | **skill-creator** | Scaffolding new agent skills |
 | **add-mcp-server** | Adding MCP server configurations |
+| **plan** | Running the planner-led planning workflow |
 
-## Extensions
+## Local Extensions
 
 | Extension | What it provides |
 |-----------|------------------|
-| **subagents/** | `subagent` tool + `/plan`, `/subagent`, `/iterate` commands — spawns agents in cmux terminals |
-| **answer.ts** | `/answer` command + `Ctrl+.` — extracts questions into interactive Q&A UI |
-| **execute-command.ts** | `execute_command` tool — lets the agent self-invoke slash commands |
-| **session-artifacts.ts** | `write_artifact` tool — session-scoped artifact storage |
-| **todos.ts** | `/todos` command + `todo` tool — file-based todo management |
-| **cost.ts** | `/cost` command — API cost summary |
-| **watchdog.ts** | Monitors agent behavior |
+| **answer/** | `/answer` command + `Ctrl+.` — extracts questions into interactive Q&A UI |
+| **execute-command/** | `execute_command` tool — lets the agent self-invoke slash commands |
+| **todos/** | `/todos` command + `todo` tool — file-based todo management |
+| **cost/** | `/cost` command — API cost summary |
+| **watchdog/** | Monitors agent behavior |
+
+## Package-Provided Capabilities
+
+Installed by `setup.sh` and managed in `settings.json`.
+
+| Package | What it provides |
+|---------|------------------|
+| **pi-subagents** | `subagent` tool + `/plan`, `/subagent`, `/iterate` commands and session-scoped artifacts |
+| **pi-mcp-adapter** | MCP adapter integration |
+| **pi-powerline-footer** | Powerline-style footer UI |
+| **pi-smart-sessions** | AI-generated session names |
+| **pi-markdown-preview** | Markdown preview support |
+| **pi-guardrails** | Additional runtime guardrails |
+| **pi-notify** | Notifications integration |
+| **chrome-cdp-skill** | Chrome DevTools Protocol CLI for visual testing |
 
 ## Commands
 
@@ -92,15 +109,20 @@ Loaded on-demand when the context matches.
 | `/answer` | Extract questions into interactive Q&A |
 | `/todos` | Visual todo manager |
 | `/cost` | API cost summary |
+| `/watchdog [off|on|<minutes>]` | Toggle the watchdog or set its intervention interval |
 
-## Packages
+## Package Sources
 
-Installed via `pi install`, managed in `settings.json`.
-
-| Package | Description |
-|---------|-------------|
-| [pi-smart-sessions](https://github.com/HazAT/pi-smart-sessions) | AI-generated session names |
-| [chrome-cdp-skill](https://github.com/pasky/chrome-cdp-skill) | Chrome DevTools Protocol CLI for visual testing |
+| Package | Source |
+|---------|--------|
+| **pi-subagents** | https://github.com/nicobailon/pi-subagents |
+| **pi-mcp-adapter** | https://github.com/nicobailon/pi-mcp-adapter |
+| **pi-powerline-footer** | https://github.com/nicobailon/pi-powerline-footer |
+| **pi-smart-sessions** | https://github.com/HazAT/pi-smart-sessions |
+| **pi-markdown-preview** | https://github.com/omaclaren/pi-markdown-preview |
+| **pi-guardrails** | https://github.com/aliou/pi-guardrails |
+| **pi-notify** | https://github.com/arosstale/pi-notify |
+| **chrome-cdp-skill** | https://github.com/pasky/chrome-cdp-skill |
 
 ---
 
@@ -109,6 +131,6 @@ Inspiration from [hazAT/pi-config](https://github.com/HazAT/pi-config)
 
 Extensions from [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff): `answer.ts`, `todos.ts`
 
-Skills from [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff): `commit`, `github`
+Skills from [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff): `commit`
 
 Skills from [getsentry/skills](https://github.com/getsentry/skills): `code-simplifier`
