@@ -1,20 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-EXPECTED_DIR="$HOME/.pi/agent"
-
-# Verify we're in the right place
-if [ "$SCRIPT_DIR" != "$EXPECTED_DIR" ]; then
-  echo "⚠️  This repo should be cloned to ~/.pi/agent/"
-  echo "   Current location: $SCRIPT_DIR"
-  echo "   Expected: $EXPECTED_DIR"
-  echo ""
-  echo "   Run: git clone git@github.com:HazAT/pi-config $EXPECTED_DIR"
-  exit 1
-fi
-
-echo "Setting up pi-config at $EXPECTED_DIR"
+echo "⚠️  This repo should be cloned to ~/.pi/agent/"
 echo ""
 
 # Create settings.json if it doesn't exist
@@ -23,6 +10,8 @@ if [ ! -f "$EXPECTED_DIR/settings.json" ]; then
   cat > "$EXPECTED_DIR/settings.json" << 'EOF'
 {
   "defaultThinkingLevel": "high",
+  "defaultProvider": "azure-openai-responses",
+  "defaultModel": "gpt-5.4",
   "packages": [
     "git:github.com/nicobailon/pi-subagents",
     "git:github.com/nicobailon/pi-mcp-adapter",

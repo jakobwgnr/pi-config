@@ -13,10 +13,10 @@ Clone this repo directly to `~/.pi/agent/` — pi auto-discovers everything from
 
 # 2. Clone this repo as your agent config
 mkdir -p ~/.pi
-git clone git@github.com:jakobwgnr/pi-config ~/.pi/agent
+git clone https://github.com/jakobwgnr/pi-config.git ~/.pi/agent
 
 # 3. Run setup (installs packages + extension deps)
-cd ~/.pi/agent && ./setup.sh
+cd ~/.pi/agent && sudo bash ./setup.sh
 
 # 4. Add your API keys to ~/.pi/agent/auth.json
 
