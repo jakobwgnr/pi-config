@@ -1,0 +1,14 @@
+{
+  "lastChangelogVersion": "0.58.4",
+  "defaultThinkingLevel": "medium",
+  "packages": [
+    "git:github.com/nicobailon/pi-mcp-adapter",
+    {
+      "source": "git:github.com/HazAT/pi-smart-sessions",
+      "extensions": ["+extensions/smart-sessions.ts"]
+    },
+    "git:github.com/pasky/chrome-cdp-skill"
+  ],
+  "hideThinkingBlock": false,
+  "extensions": []
+}
