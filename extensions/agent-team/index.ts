@@ -18,10 +18,12 @@
  * Usage: pi -e extensions/agent-team.ts
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import {
+  DynamicBorder,
+  type ExtensionAPI,
+} from "@mariozechner/pi-coding-agent";
 import {
   Container,
-  DynamicBorder,
   Text,
   matchesKey,
   Key,
@@ -644,8 +646,8 @@ export default function (pi: ExtensionAPI) {
           }
 
           const controls = widgetState.expandedAgent
-            ? theme.fg("dim", "Space collapse")
-            : theme.fg("dim", "↑↓←→ move · Space expand");
+            ? theme.fg("dim", "Space to collapse")
+            : theme.fg("dim", "Arrow keys to navigate · Space to expand");
           const output = rows.map((columns) => columns.join(" ".repeat(gap)));
           text.setText(output.concat(["", controls]).join("\n"));
           return text.render(width);
@@ -1153,10 +1155,10 @@ export default function (pi: ExtensionAPI) {
       };
 
       focusComponent.focused = true;
-      focusComponent.addChild(new DynamicBorder());
+      focusComponent.addChild(new DynamicBorder((value: string) => value));
       focusComponent.addChild(focusText);
       focusComponent.addChild(spacer);
-      focusComponent.addChild(new DynamicBorder());
+      focusComponent.addChild(new DynamicBorder((value: string) => value));
       focusComponent.handleInput = (keyData: string) => {
         if (matchesKey(keyData, Key.escape) || matchesKey(keyData, Key.ctrl("c"))) {
           exitAgentTeamFocus(ctx);

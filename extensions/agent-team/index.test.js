@@ -156,6 +156,14 @@ test('agent-team registers a focus command for reliable keyboard interaction', (
   assert.match(source, /ctx\.ui\.showOverlay\(focusComponent/);
   assert.match(source, /ctx\.ui\.setFocus\(focusComponent\)/);
   assert.match(source, /Space to expand\/collapse, Esc to return to the editor/);
+  assert.match(source, /Arrow keys to navigate · Space to expand/);
+  assert.match(source, /Space to collapse/);
+});
+
+test('agent-team focus overlay uses DynamicBorder from pi-coding-agent instead of pi-tui', () => {
+  assert.match(source, /import \{[\s\S]*DynamicBorder,[\s\S]*type ExtensionAPI,[\s\S]*\} from "@mariozechner\/pi-coding-agent"/);
+  assert.match(source, /type AutocompleteItem,[\s\S]*\} from "@mariozechner\/pi-tui"/);
+  assert.match(source, /new DynamicBorder\(\(value: string\) => value\)/);
 });
 
 test('agent-team focus mode exits on Escape and restores editor focus', () => {

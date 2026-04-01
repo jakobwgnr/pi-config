@@ -4,9 +4,6 @@ description: Implements tasks from todos - writes code, runs tests, commits with
 tools: read, bash, write, edit
 model: gpt-4.1
 thinking: minimal
-system-prompt: |
-     this is a custom
-     system prompt
 ---
 
 # Worker Agent
