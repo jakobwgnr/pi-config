@@ -33,6 +33,7 @@ import {
   readFileSync,
   unlinkSync,
 } from "fs";
+import { homedir } from "os";
 import { join, resolve } from "path";
 
 // ── Types ────────────────────────────────────────
@@ -145,6 +146,23 @@ function scanAgentDirs(cwd: string): AgentDef[] {
   return agents;
 }
 
+function findTeamsPath(cwd: string): string | null {
+  const localTeamsPath = join(cwd, ".pi", "agents", "teams.yaml");
+  if (existsSync(localTeamsPath)) return localTeamsPath;
+
+  const globalTeamsPath = join(homedir(), ".pi", "agents", "teams.yaml");
+  if (existsSync(globalTeamsPath)) return globalTeamsPath;
+
+  return null;
+}
+
+function formatTeamsSource(cwd: string, teamsPath: string | null): string {
+  if (!teamsPath) return "generated default team";
+  return teamsPath === join(cwd, ".pi", "agents", "teams.yaml")
+    ? ".pi/agents/teams.yaml"
+    : "~/.pi/agents/teams.yaml";
+}
+
 // ── Extension ────────────────────────────────────
 
 export default function (pi: ExtensionAPI) {
@@ -158,6 +176,7 @@ export default function (pi: ExtensionAPI) {
   let contextWindow = 0;
   let isActive = true;
   let previousActiveTools: string[] | null = null;
+  let teamsSource = "generated default team";
 
   function loadAgents(cwd: string) {
     // Create session storage dir
@@ -169,9 +188,10 @@ export default function (pi: ExtensionAPI) {
     // Load all agent definitions
     allAgentDefs = scanAgentDirs(cwd);
 
-    // Load teams from .pi/agents/teams.yaml
-    const teamsPath = join(cwd, ".pi", "agents", "teams.yaml");
-    if (existsSync(teamsPath)) {
+    // Load teams from project-local or global config
+    const teamsPath = findTeamsPath(cwd);
+    teamsSource = formatTeamsSource(cwd, teamsPath);
+    if (teamsPath) {
       try {
         teams = parseTeamsYaml(readFileSync(teamsPath, "utf-8"));
       } catch {
@@ -298,6 +318,36 @@ export default function (pi: ExtensionAPI) {
     ctx.ui.setFooter(undefined);
   }
 
+  function setFooter(ctx = widgetCtx) {
+    if (!ctx) return;
+    ctx.ui.setFooter((_tui, theme, _footerData) => ({
+      dispose: () => {},
+      invalidate() {},
+      render(width: number): string[] {
+        if (!isActive) {
+          return [truncateToWidth("", width)];
+        }
+
+        const model = ctx.model?.id || "no-model";
+        const usage = ctx.getContextUsage();
+        const pct = usage ? usage.percent : 0;
+        const filled = Math.round(pct / 10);
+        const bar = "#".repeat(filled) + "-".repeat(10 - filled);
+
+        const left =
+          theme.fg("dim", ` ${model}`) +
+          theme.fg("muted", " · ") +
+          theme.fg("accent", activeTeamName);
+        const right = theme.fg("dim", `[${bar}] ${Math.round(pct)}% `);
+        const pad = " ".repeat(
+          Math.max(1, width - visibleWidth(left) - visibleWidth(right)),
+        );
+
+        return [truncateToWidth(left + pad + right, width)];
+      },
+    }));
+  }
+
   function updateStatus(ctx = widgetCtx) {
     if (!ctx) return;
     ctx.ui.setStatus(
@@ -350,6 +400,27 @@ export default function (pi: ExtensionAPI) {
         },
       };
     });
+  }
+
+  function enableAgentTeam(ctx = widgetCtx) {
+    if (!ctx) return;
+
+    widgetCtx = ctx;
+    isActive = true;
+    loadAgents(ctx.cwd);
+
+    const teamNames = Object.keys(teams);
+    if (teamNames.length > 0) {
+      activateTeam(teams[activeTeamName] ? activeTeamName : teamNames[0]);
+    } else {
+      activeTeamName = "";
+      agentStates.clear();
+    }
+
+    pi.setActiveTools(["dispatch_agent"]);
+    updateStatus(ctx);
+    updateWidget();
+    setFooter(ctx);
   }
 
   // ── Dispatch Agent (returns Promise) ─────────
@@ -708,7 +779,10 @@ export default function (pi: ExtensionAPI) {
       }
       const teamNames = Object.keys(teams);
       if (teamNames.length === 0) {
-        ctx.ui.notify("No teams defined in .pi/agents/teams.yaml", "warning");
+        ctx.ui.notify(
+          "No teams defined in .pi/agents/teams.yaml or ~/.pi/agents/teams.yaml",
+          "warning",
+        );
         return;
       }
 
@@ -804,6 +878,29 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
+  pi.registerCommand("agents-team:activate", {
+    description: "Activate agent-team for the current session",
+    handler: async (_args, ctx) => {
+      widgetCtx = ctx;
+      if (isActive) {
+        return "Agent team is already active for this session.";
+      }
+
+      enableAgentTeam(ctx);
+
+      const members = Array.from(agentStates.values())
+        .map((s) => displayName(s.def.name))
+        .join(", ");
+      ctx.ui.notify(
+        `Agent team activated for this session\n` +
+          `Team: ${activeTeamName} (${members})\n` +
+          `Team sets loaded from: ${teamsSource}`,
+        "info",
+      );
+      return "Agent team activated for this session.";
+    },
+  });
+
   // ── System Prompt Override ───────────────────
 
   pi.on("before_agent_start", async (_event, _ctx) => {
@@ -874,60 +971,22 @@ ${agentCatalog}`,
       }
     }
 
-    loadAgents(_ctx.cwd);
-
     previousActiveTools = pi.getActiveTools();
+    enableAgentTeam(_ctx);
 
-    // Default to first team — use /agents-team to switch
-    const teamNames = Object.keys(teams);
-    if (teamNames.length > 0) {
-      activateTeam(teamNames[0]);
-    }
-
-    // Lock down to dispatcher-only (tool already registered at top level)
-    pi.setActiveTools(["dispatch_agent"]);
-
-    updateStatus(_ctx);
     const members = Array.from(agentStates.values())
       .map((s) => displayName(s.def.name))
       .join(", ");
     _ctx.ui.notify(
       `Team: ${activeTeamName} (${members})\n` +
-        `Team sets loaded from: .pi/agents/teams.yaml\n\n` +
+        `Team sets loaded from: ${teamsSource}\n\n` +
         `/agents-team          Select a team\n` +
+        `/agents-team:activate Activate agent-team for this session\n` +
         `/agents-team:deactivate Disable agent-team for this session\n` +
         `/agents-list          List active agents and status\n` +
         `/agents-grid <1-6>    Set grid column count`,
       "info",
     );
     updateWidget();
-
-    // Footer: model | team | context bar
-    _ctx.ui.setFooter((_tui, theme, _footerData) => ({
-      dispose: () => {},
-      invalidate() {},
-      render(width: number): string[] {
-        if (!isActive) {
-          return [truncateToWidth("", width)];
-        }
-
-        const model = _ctx.model?.id || "no-model";
-        const usage = _ctx.getContextUsage();
-        const pct = usage ? usage.percent : 0;
-        const filled = Math.round(pct / 10);
-        const bar = "#".repeat(filled) + "-".repeat(10 - filled);
-
-        const left =
-          theme.fg("dim", ` ${model}`) +
-          theme.fg("muted", " · ") +
-          theme.fg("accent", activeTeamName);
-        const right = theme.fg("dim", `[${bar}] ${Math.round(pct)}% `);
-        const pad = " ".repeat(
-          Math.max(1, width - visibleWidth(left) - visibleWidth(right)),
-        );
-
-        return [truncateToWidth(left + pad + right, width)];
-      },
-    }));
   });
 }
