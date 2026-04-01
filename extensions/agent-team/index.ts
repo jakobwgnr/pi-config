@@ -506,7 +506,10 @@ export default function (pi: ExtensionAPI) {
     const agents = Array.from(agentStates.values());
     if (agents.length === 0) return false;
 
-    if (keyData === " ") {
+    const toggleExpand =
+      keyData === " " || keyData === "\u0000" || matchesKey(keyData, Key.ctrl("space"));
+
+    if (toggleExpand) {
       if (widgetState.expandedAgent) {
         widgetState.expandedAgent = null;
       } else {
@@ -524,14 +527,18 @@ export default function (pi: ExtensionAPI) {
 
     const cols = Math.min(gridCols, agents.length);
     const previousIndex = widgetState.selectedIndex;
+    const moveUp = keyData === "\u001b[A" || keyData === "\u001b[1;5A";
+    const moveDown = keyData === "\u001b[B" || keyData === "\u001b[1;5B";
+    const moveLeft = keyData === "\u001b[D" || keyData === "\u001b[1;5D";
+    const moveRight = keyData === "\u001b[C" || keyData === "\u001b[1;5C";
 
-    if (keyData === "\u001b[A") {
+    if (moveUp) {
       widgetState.selectedIndex = clamp(widgetState.selectedIndex - cols, 0, agents.length - 1);
-    } else if (keyData === "\u001b[B") {
+    } else if (moveDown) {
       widgetState.selectedIndex = clamp(widgetState.selectedIndex + cols, 0, agents.length - 1);
-    } else if (keyData === "\u001b[D") {
+    } else if (moveLeft) {
       widgetState.selectedIndex = clamp(widgetState.selectedIndex - 1, 0, agents.length - 1);
-    } else if (keyData === "\u001b[C") {
+    } else if (moveRight) {
       widgetState.selectedIndex = clamp(widgetState.selectedIndex + 1, 0, agents.length - 1);
     } else {
       return false;
@@ -647,8 +654,8 @@ export default function (pi: ExtensionAPI) {
           }
 
           const controls = widgetState.expandedAgent
-            ? theme.fg("dim", "Space to collapse")
-            : theme.fg("dim", "Arrow keys to navigate · Space to expand");
+            ? theme.fg("dim", "Space/Ctrl+Space to collapse")
+            : theme.fg("dim", "Arrow/Ctrl+Arrow to navigate · Space/Ctrl+Space to expand");
           const output = rows.map((columns) => columns.join(" ".repeat(gap)));
           text.setText(output.concat(["", controls]).join("\n"));
           return text.render(width);
@@ -1150,7 +1157,7 @@ export default function (pi: ExtensionAPI) {
         focusText.setText([
           "Agent Team Focus",
           status,
-          "Use ↑↓←→ to move, Space to expand/collapse, Esc to return to the editor.",
+          "Use ↑↓←→ or Ctrl+Arrow to move, Space or Ctrl+Space to expand/collapse, Esc to return to the editor.",
         ].join("\n"));
         spacer.setText("");
       };
@@ -1179,7 +1186,7 @@ export default function (pi: ExtensionAPI) {
       ctx.ui.showOverlay(focusComponent, { centered: true, width: 72, height: 8 });
       ctx.ui.setFocus(focusComponent);
       ctx.ui.notify("Agent team focus mode active", "info");
-      return "Agent team focus mode active. Use arrows to navigate, Space to expand, Esc to exit.";
+      return "Agent team focus mode active. Use arrows or Ctrl+Arrow to navigate, Space or Ctrl+Space to expand, Esc to exit.";
     },
   });
 

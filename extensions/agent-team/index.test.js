@@ -145,19 +145,29 @@ test('agent-team empty state mentions global pi agent directory', () => {
   assert.match(source, /~\/\.pi\/agent\/agents\//);
 });
 
-test('agent-team widget handles Space to toggle expanded agent card', () => {
-  assert.match(source, /if \(keyData === " "\)/);
+test('agent-team widget handles Space and Ctrl+Space to toggle expanded agent card', () => {
+  assert.match(source, /keyData === " "/);
+  assert.match(source, /keyData === "\\u0000"/);
+  assert.match(source, /Key\.ctrl\("space"\)/);
   assert.match(source, /widgetState\.expandedAgent = selectedAgent\.def\.name/);
   assert.match(source, /widgetState\.expandedAgent = null/);
+});
+
+
+test('agent-team widget handles Ctrl+Arrow escape sequences for navigation', () => {
+  assert.match(source, /keyData === "\\u001b\[1;5A"/);
+  assert.match(source, /keyData === "\\u001b\[1;5B"/);
+  assert.match(source, /keyData === "\\u001b\[1;5C"/);
+  assert.match(source, /keyData === "\\u001b\[1;5D"/);
 });
 
 test('agent-team registers a focus command for reliable keyboard interaction', () => {
   assert.match(source, /pi\.registerCommand\("agents-team:focus"/);
   assert.match(source, /ctx\.ui\.showOverlay\(focusComponent/);
   assert.match(source, /ctx\.ui\.setFocus\(focusComponent\)/);
-  assert.match(source, /Space to expand\/collapse, Esc to return to the editor/);
-  assert.match(source, /Arrow keys to navigate · Space to expand/);
-  assert.match(source, /Space to collapse/);
+  assert.match(source, /Ctrl\+Arrow to move, Space or Ctrl\+Space to expand\/collapse, Esc to return to the editor/);
+  assert.match(source, /Arrow\/Ctrl\+Arrow to navigate · Space\/Ctrl\+Space to expand/);
+  assert.match(source, /Space\/Ctrl\+Space to collapse/);
 });
 
 test('agent-team focus overlay uses DynamicBorder from pi-coding-agent instead of pi-tui', () => {
