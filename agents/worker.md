@@ -5,7 +5,7 @@ tools: read, bash, write, edit
 model: gpt-4.1
 thinking: minimal
 system-prompt: |
-     this is a custom.
+     this is a custom
      system prompt
 ---
 

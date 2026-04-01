@@ -38,12 +38,15 @@ import { join, resolve } from "path";
 
 // ── Types ────────────────────────────────────────
 
+type SystemPromptType = "append" | "replace";
+
 interface AgentDef {
   name: string;
   description: string;
   tools: string;
   systemPrompt: string;
   customSystemPrompt: string;
+  systemPromptType: SystemPromptType;
   file: string;
 }
 
@@ -142,6 +145,16 @@ function parseSimpleYamlFrontmatter(raw: string): Record<string, string> | null 
   return result;
 }
 
+function parseSystemPromptType(value?: string): SystemPromptType {
+  return value === "append" ? "append" : "replace";
+}
+
+function buildAgentSystemPrompt(def: Pick<AgentDef, "customSystemPrompt" | "systemPrompt">): string {
+  return [def.customSystemPrompt, def.systemPrompt]
+    .filter((part) => part.trim().length > 0)
+    .join("\n\n");
+}
+
 function parseAgentFile(filePath: string): AgentDef | null {
   try {
     const raw = readFileSync(filePath, "utf-8");
@@ -157,6 +170,7 @@ function parseAgentFile(filePath: string): AgentDef | null {
       tools: frontmatter.tools || "read,grep,find,ls",
       systemPrompt: match[2].trim(),
       customSystemPrompt: (frontmatter["system-prompt"] || "").trim(),
+      systemPromptType: parseSystemPromptType(frontmatter["system-prompt-type"]),
       file: filePath,
     };
   } catch {
@@ -556,9 +570,7 @@ export default function (pi: ExtensionAPI) {
     const agentSessionFile = join(sessionDir, `${agentKey}.json`);
 
     // Build args — first run creates session, subsequent runs resume
-    const appendedSystemPrompt = state.def.customSystemPrompt
-      ? `${state.def.systemPrompt}\n\n${state.def.customSystemPrompt}`
-      : state.def.systemPrompt;
+    const agentSystemPrompt = buildAgentSystemPrompt(state.def);
 
     const args = [
       "--mode",
@@ -571,8 +583,10 @@ export default function (pi: ExtensionAPI) {
       state.def.tools,
       "--thinking",
       "off",
-      "--append-system-prompt",
-      appendedSystemPrompt,
+      state.def.systemPromptType === "append"
+        ? "--append-system-prompt"
+        : "--system-prompt",
+      agentSystemPrompt,
       "--session",
       agentSessionFile,
     ];
