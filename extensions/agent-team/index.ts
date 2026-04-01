@@ -5,7 +5,8 @@
  * to specialist agents via the `dispatch_agent` tool. Each specialist
  * maintains its own Pi session for cross-invocation memory.
  *
- * Loads agent definitions from agents/*.md, .claude/agents/*.md, .pi/agents/*.md.
+ * Loads agent definitions from agents/*.md, .claude/agents/*.md, .pi/agents/*.md,
+ * and ~/.pi/agent/agents/*.md.
  * Teams are defined in .pi/agents/teams.yaml — on boot a select dialog lets
  * you pick which team to work with. Only team members are available for dispatch.
  *
@@ -183,6 +184,7 @@ function scanAgentDirs(cwd: string): AgentDef[] {
     join(cwd, "agents"),
     join(cwd, ".claude", "agents"),
     join(cwd, ".pi", "agents"),
+    join(homedir(), ".pi", "agent", "agents"),
   ];
 
   const agents: AgentDef[] = [];
@@ -452,7 +454,10 @@ export default function (pi: ExtensionAPI) {
         render(width: number): string[] {
           if (agentStates.size === 0) {
             text.setText(
-              theme.fg("dim", "No agents found. Add .md files to agents/"),
+              theme.fg(
+                "dim",
+                "No agents found. Add .md files to agents/, .pi/agents/, or ~/.pi/agent/agents/",
+              ),
             );
             return text.render(width);
           }

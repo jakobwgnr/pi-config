@@ -1,8 +1,7 @@
 const assert = require('node:assert/strict');
-const { mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
+const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { test } = require('node:test');
-const { tmpdir } = require('node:os');
 
 const extensionPath = join(__dirname, 'index.ts');
 const source = readFileSync(extensionPath, 'utf8');
@@ -117,4 +116,15 @@ test('agent-team runtime uses --system-prompt for default replace mode', () => {
 
 test('agent-team runtime can use --append-system-prompt for append mode', () => {
   assert.match(source, /"--append-system-prompt"/);
+});
+
+test('agent-team scans global pi agent directory for agent definitions', () => {
+  assert.match(
+    source,
+    /join\(homedir\(\), "\.pi", "agent", "agents"\)/,
+  );
+});
+
+test('agent-team empty state mentions global pi agent directory', () => {
+  assert.match(source, /~\/\.pi\/agent\/agents\//);
 });

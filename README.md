@@ -85,6 +85,7 @@ Loaded on-demand when the context matches.
 | **todos/** | `/todos` command + `todo` tool — file-based todo management |
 | **cost/** | `/cost` command — API cost summary |
 | **watchdog/** | Monitors agent behavior |
+| **agent-team/** | Dispatcher-only orchestrator that loads team definitions from `teams.yaml` and agent definitions from project and global pi agent directories |
 
 ## Package-Provided Capabilities
 
@@ -100,6 +101,10 @@ Installed by `setup.sh` and managed in `settings.json`.
 | **pi-guardrails** | Additional runtime guardrails |
 | **pi-notify** | Notifications integration |
 | **chrome-cdp-skill** | Chrome DevTools Protocol CLI for visual testing |
+
+## Agent Discovery
+
+Pi auto-discovers agent definitions in this repo's `agents/` directory. The `agent-team` extension also loads agent definitions from project-local `.pi/agents/` and global `~/.pi/agent/agents/`, mirroring how it already falls back to the global `teams.yaml`.
 
 ## Commands
 
