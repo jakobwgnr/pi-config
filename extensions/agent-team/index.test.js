@@ -162,7 +162,7 @@ test('agent-team empty state mentions global pi agent directory', () => {
 });
 
 test('agent-team widget handles semantic Ctrl+Arrow navigation and Ctrl+Space to toggle expansion', () => {
-  assert.match(source, /matchesKey\(keyData, Key\.ctrl\("space"\)\)/);
+  assert.match(source, /isCtrlOrCmd\("space"\)/);
   assert.match(source, /isCtrlOrCmd\("up"\)/);
   assert.match(source, /isCtrlOrCmd\("down"\)/);
   assert.match(source, /isCtrlOrCmd\("left"\)/);
@@ -190,8 +190,10 @@ test('agent-team widget instructions mention semantic navigation key help', () =
 });
 
 
-test('agent-team widget shows configured model beside agent name and in expanded details', () => {
+test('agent-team widget shows model and todo status inline in the header, and model in expanded details', () => {
   assert.match(source, /const modelSuffix = state\.def\.model \? ` \[\$\{state\.def\.model\}\]` : ""/);
+  assert.match(source, /const todoSuffix = tstats\.total === 0 \? "no todos" : `\$\{tstats\.completed\}\/\$\{tstats\.total\} todos`/);
+  assert.match(source, /const headerContent =\s*theme\.fg\("accent", theme\.bold\(nameText\)\) \+\s*theme\.fg\("muted", separator\) \+\s*theme\.fg\(todoColor, todoSuffix\)/);
   assert.match(source, /Model: \$\{state\.def\.model \|\| "session default"\}/);
 });
 

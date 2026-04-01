@@ -592,21 +592,22 @@ export default function (pi: ExtensionAPI) {
 
     const namePrefix = options.expanded ? "▼ " : options.selected ? "▸ " : "  ";
     const modelSuffix = state.def.model ? ` [${state.def.model}]` : "";
-    const nameText = truncateLine(namePrefix + displayName(state.def.name) + modelSuffix, w - 1);
-    lines.push(
-      border(
-        " " + theme.fg("accent", theme.bold(nameText)),
-        1 + nameText.length,
-      ),
-    );
 
-    // ---- TODO Status headline ----
     const todos = findAgentTodos(state.def, widgetCtx?.cwd||process.cwd());
     const tstats = todoStats(todos);
-    let todoHeadline = tstats.total === 0
-      ? theme.fg("dim", "no todos")
-      : theme.fg("accent", `${tstats.completed} of ${tstats.total} todos done`);
-    lines.push(border(" " + todoHeadline, 1 + todoHeadline.length));
+    const todoSuffix = tstats.total === 0 ? "no todos" : `${tstats.completed}/${tstats.total} todos`;
+    const todoColor = tstats.total === 0 ? "dim" : "accent";
+    const separator = " · ";
+    const reservedHeaderWidth = todoSuffix.length + separator.length;
+    const nameText = truncateToWidth(
+      namePrefix + displayName(state.def.name) + modelSuffix,
+      Math.max(1, w - 1 - reservedHeaderWidth),
+    );
+    const headerContent =
+      theme.fg("accent", theme.bold(nameText)) +
+      theme.fg("muted", separator) +
+      theme.fg(todoColor, todoSuffix);
+    lines.push(border(" " + headerContent, 1 + visibleWidth(headerContent)));
 
     const statusStr = `${statusIcon} ${state.status}${state.status !== "idle" ? ` ${Math.round(state.elapsed / 1000)}s` : ""}`;
     const statusText = truncateLine(statusStr, w - 1);
