@@ -544,6 +544,7 @@ export default function (pi: ExtensionAPI) {
     if (!focusOverlayActive || !ctx) return;
     ctx.ui.hideOverlay();
     focusOverlayActive = false;
+    ctx.ui.requestRender();
   }
 
   function clearWidgetAndFooter(ctx = widgetCtx) {
@@ -1120,7 +1121,7 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  pi.registerCommand("agent-team:focus", {
+  pi.registerCommand("agents-team:focus", {
     description: "Focus the agent-team widget for keyboard navigation",
     handler: async (_args, ctx) => {
       widgetCtx = ctx;
@@ -1162,7 +1163,6 @@ export default function (pi: ExtensionAPI) {
       focusComponent.handleInput = (keyData: string) => {
         if (matchesKey(keyData, Key.escape) || matchesKey(keyData, Key.ctrl("c"))) {
           exitAgentTeamFocus(ctx);
-          ctx.ui.setFocus((ctx as any).editor);
           ctx.ui.notify("Agent team focus mode exited", "info");
           return;
         }
@@ -1313,7 +1313,7 @@ ${agentCatalog}`,
       `Team: ${activeTeamName} (${members})\n` +
         `Team sets loaded from: ${teamsSource}\n\n` +
         `/agents-team          Select a team\n` +
-        `/agent-team:focus     Focus the agent-team widget\n` +
+        `/agents-team:focus    Focus the agent-team widget\n` +
         `/agents-team:activate Activate agent-team for this session\n` +
         `/agents-team:deactivate Disable agent-team for this session\n` +
         `/agents-list          List active agents and status\n` +

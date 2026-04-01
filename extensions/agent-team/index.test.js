@@ -152,7 +152,7 @@ test('agent-team widget handles Space to toggle expanded agent card', () => {
 });
 
 test('agent-team registers a focus command for reliable keyboard interaction', () => {
-  assert.match(source, /pi\.registerCommand\("agent-team:focus"/);
+  assert.match(source, /pi\.registerCommand\("agents-team:focus"/);
   assert.match(source, /ctx\.ui\.showOverlay\(focusComponent/);
   assert.match(source, /ctx\.ui\.setFocus\(focusComponent\)/);
   assert.match(source, /Space to expand\/collapse, Esc to return to the editor/);
@@ -166,10 +166,11 @@ test('agent-team focus overlay uses DynamicBorder from pi-coding-agent instead o
   assert.match(source, /new DynamicBorder\(\(value: string\) => value\)/);
 });
 
-test('agent-team focus mode exits on Escape and restores editor focus', () => {
+test('agent-team focus mode exits on Escape by closing the overlay without manual editor focus restoration', () => {
   assert.match(source, /matchesKey\(keyData, Key\.escape\)/);
-  assert.match(source, /ctx\.ui\.setFocus\(\(ctx as any\)\.editor\)/);
+  assert.doesNotMatch(source, /ctx\.ui\.setFocus\(\(ctx as any\)\.editor\)/);
   assert.match(source, /ctx\.ui\.hideOverlay\(\)/);
+  assert.match(source, /ctx\.ui\.requestRender\(\)/);
 });
 
 test('agent-team widget hides other agents while one card is expanded', () => {
