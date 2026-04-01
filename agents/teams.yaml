@@ -10,3 +10,4 @@ small-team:
 data-migration:
   - source-system-specialist
   - target-system-specialist
+  - data-mapping-expert
