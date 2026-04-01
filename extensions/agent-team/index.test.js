@@ -144,3 +144,20 @@ test('etl-designer agent definition declares adamms skill and readiness workflow
 test('agent-team empty state mentions global pi agent directory', () => {
   assert.match(source, /~\/\.pi\/agent\/agents\//);
 });
+
+test('agent-team widget handles Space to toggle expanded agent card', () => {
+  assert.match(source, /if \(keyData === " "\)/);
+  assert.match(source, /widgetState\.expandedAgent = selectedAgent\.def\.name/);
+  assert.match(source, /widgetState\.expandedAgent = null/);
+});
+
+test('agent-team widget hides other agents while one card is expanded', () => {
+  assert.match(source, /const agents = widgetState\.expandedAgent\s*\? allAgents\.filter\(\(agent\) => agent\.def\.name === widgetState\.expandedAgent\)\s*:\s*allAgents/);
+  assert.match(source, /const cols = widgetState\.expandedAgent \? 1 : Math\.min\(gridCols, agents\.length\)/);
+});
+
+test('agent-team expanded card shows active work details', () => {
+  assert.match(source, /Doing: \$\{currentWork\}/);
+  assert.match(source, /state\.status === "running"\s*\? state\.lastWork \|\| state\.task \|\| "Working\.\.\."/);
+  assert.match(source, /Role: \$\{description\}/);
+});

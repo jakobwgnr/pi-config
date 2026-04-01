@@ -64,6 +64,11 @@ interface AgentState {
   timer?: ReturnType<typeof setInterval>;
 }
 
+interface AgentWidgetState {
+  selectedIndex: number;
+  expandedAgent: string | null;
+}
+
 // ── Display Name Helper ──────────────────────────
 
 function displayName(name: string): string {
@@ -245,6 +250,10 @@ export default function (pi: ExtensionAPI) {
   let isActive = true;
   let previousActiveTools: string[] | null = null;
   let teamsSource = "generated default team";
+  const widgetState: AgentWidgetState = {
+    selectedIndex: 0,
+    expandedAgent: null,
+  };
 
   function loadAgents(cwd: string) {
     // Create session storage dir
@@ -304,97 +313,179 @@ export default function (pi: ExtensionAPI) {
     // Auto-size grid columns based on team size
     const size = agentStates.size;
     gridCols = size <= 3 ? size : size === 4 ? 2 : 3;
+    widgetState.selectedIndex = 0;
+    widgetState.expandedAgent = null;
   }
 
   // ── Grid Rendering ───────────────────────────
+
+  function clamp(value: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function truncateLine(text: string, width: number): string {
+    if (width <= 0) return "";
+    if (text.length <= width) return text;
+    if (width <= 3) return ".".repeat(width);
+    return text.slice(0, width - 3) + "...";
+  }
+
+  function wrapText(text: string, width: number, maxLines: number): string[] {
+    if (width <= 0 || maxLines <= 0) return [];
+
+    const words = text.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+    if (words.length === 0) return [""];
+
+    const lines: string[] = [];
+    let current = "";
+
+    for (const word of words) {
+      if (!current) {
+        current = word.length > width ? truncateLine(word, width) : word;
+        continue;
+      }
+
+      if (`${current} ${word}`.length <= width) {
+        current += ` ${word}`;
+        continue;
+      }
+
+      lines.push(current);
+      if (lines.length === maxLines) {
+        return lines;
+      }
+      current = word.length > width ? truncateLine(word, width) : word;
+    }
+
+    if (lines.length < maxLines && current) {
+      lines.push(current);
+    }
+
+    if (lines.length > maxLines) {
+      return lines.slice(0, maxLines);
+    }
+
+    return lines;
+  }
+
+  function getStatusColor(status: AgentState["status"]): string {
+    return status === "idle"
+      ? "dim"
+      : status === "running"
+        ? "accent"
+        : status === "done"
+          ? "success"
+          : status === "disabled"
+            ? "muted"
+            : "error";
+  }
+
+  function getStatusIcon(status: AgentState["status"]): string {
+    return status === "idle"
+      ? "○"
+      : status === "running"
+        ? "●"
+        : status === "done"
+          ? "✓"
+          : status === "disabled"
+            ? "⏸"
+            : "✗";
+  }
+
+  function getContextBar(state: AgentState): string {
+    const filled = clamp(Math.ceil(state.contextPct / 20), 0, 5);
+    const bar = "#".repeat(filled) + "-".repeat(5 - filled);
+    return `[${bar}] ${Math.ceil(state.contextPct)}%`;
+  }
+
+  function getAgentDetailLines(state: AgentState, contentWidth: number): string[] {
+    const description = truncateLine(state.def.description || "No description", contentWidth);
+    const task = truncateLine(state.task || "Waiting for work", contentWidth);
+    const currentWork = truncateLine(
+      state.status === "running"
+        ? state.lastWork || state.task || "Working..."
+        : state.lastWork || "No recent output",
+      contentWidth,
+    );
+    const tools = truncateLine(`Tools: ${state.def.tools}`, contentWidth);
+    const runs = truncateLine(
+      `Runs: ${state.runCount} · Session: ${state.sessionFile ? "resume" : "new"}`,
+      contentWidth,
+    );
+
+    const detailLines = [
+      `Role: ${description}`,
+      `Task: ${task}`,
+      `Doing: ${currentWork}`,
+      tools,
+      runs,
+    ];
+
+    if (state.def.customSystemPrompt) {
+      detailLines.push("Custom system prompt configured ✓");
+    }
+
+    return detailLines.flatMap((line) => wrapText(line, contentWidth, 2));
+  }
 
   function renderCard(
     state: AgentState,
     colWidth: number,
     theme: any,
+    options: { expanded: boolean; selected: boolean },
   ): string[] {
-    const w = colWidth - 2;
-    const truncate = (s: string, max: number) =>
-      s.length > max ? s.slice(0, max - 3) + "..." : s;
+    const w = Math.max(8, colWidth - 2);
+    const statusColor = getStatusColor(state.status);
+    const statusIcon = getStatusIcon(state.status);
 
-    const statusColor =
-      state.status === "idle"
-        ? "dim"
-        : state.status === "running"
-          ? "accent"
-          : state.status === "done"
-            ? "success"
-            : state.status === "disabled"
-              ? "muted"
-              : "error";
-    const statusIcon =
-      state.status === "idle"
-        ? "○"
-        : state.status === "running"
-          ? "●"
-          : state.status === "done"
-            ? "✓"
-            : state.status === "disabled"
-              ? "⏸"
-              : "✗";
-
-    const name = displayName(state.def.name);
-    const nameStr = theme.fg("accent", theme.bold(truncate(name, w)));
-    const nameVisible = Math.min(name.length, w);
-
-    const statusStr = `${statusIcon} ${state.status}`;
-    const timeStr =
-      state.status !== "idle" ? ` ${Math.round(state.elapsed / 1000)}s` : "";
-    const statusText = truncate(statusStr + timeStr, w - 1);
-    const statusLine = theme.fg(statusColor, statusText);
-    const statusVisible = statusText.length;
-
-    const customPromptText = state.def.customSystemPrompt
-      ? truncate("Custom System Prompt ✓", w - 1)
-      : "";
-    const customPromptLine = customPromptText
-      ? theme.fg("success", customPromptText)
-      : "";
-    const customPromptVisible = customPromptText.length;
-
-    // Context bar: 5 blocks + percent
-    const filled = Math.ceil(state.contextPct / 20);
-    const bar = "#".repeat(filled) + "-".repeat(5 - filled);
-    const ctxStr = `[${bar}] ${Math.ceil(state.contextPct)}%`;
-    const ctxLine = theme.fg("dim", ctxStr);
-    const ctxVisible = ctxStr.length;
-
-    const workRaw = state.task
-      ? state.lastWork || state.task
-      : state.def.description;
-    const workText = truncate(workRaw, Math.min(50, w - 1));
-    const workLine = theme.fg("muted", workText);
-    const workVisible = workText.length;
+    const topBorderColor = options.selected || options.expanded ? "accent" : "dim";
+    const sideBorderColor = options.selected || options.expanded ? "accent" : "dim";
 
     const top = "┌" + "─".repeat(w) + "┐";
     const bot = "└" + "─".repeat(w) + "┘";
-    const border = (content: string, visLen: number) =>
-      theme.fg("dim", "│") +
+    const border = (content: string, visibleLength: number) =>
+      theme.fg(sideBorderColor, "│") +
       content +
-      " ".repeat(Math.max(0, w - visLen)) +
-      theme.fg("dim", "│");
+      " ".repeat(Math.max(0, w - visibleLength)) +
+      theme.fg(sideBorderColor, "│");
 
-    const lines = [
-      theme.fg("dim", top),
-      border(" " + nameStr, 1 + nameVisible),
-      border(" " + statusLine, 1 + statusVisible),
-    ];
+    const lines = [theme.fg(topBorderColor, top)];
 
-    if (customPromptText) {
-      lines.push(border(" " + customPromptLine, 1 + customPromptVisible));
-    }
-
+    const namePrefix = options.expanded ? "▼ " : options.selected ? "▸ " : "  ";
+    const nameText = truncateLine(namePrefix + displayName(state.def.name), w - 1);
     lines.push(
-      border(" " + ctxLine, 1 + ctxVisible),
-      border(" " + workLine, 1 + workVisible),
-      theme.fg("dim", bot),
+      border(
+        " " + theme.fg("accent", theme.bold(nameText)),
+        1 + nameText.length,
+      ),
     );
 
+    const statusStr = `${statusIcon} ${state.status}${state.status !== "idle" ? ` ${Math.round(state.elapsed / 1000)}s` : ""}`;
+    const statusText = truncateLine(statusStr, w - 1);
+    lines.push(border(" " + theme.fg(statusColor, statusText), 1 + statusText.length));
+
+    const ctxStr = getContextBar(state);
+    lines.push(border(" " + theme.fg("dim", ctxStr), 1 + ctxStr.length));
+
+    const summaryLabel = state.status === "running" ? "Doing" : "Summary";
+    const summaryRaw = state.status === "running"
+      ? state.lastWork || state.task || "Working..."
+      : state.task
+        ? state.lastWork || state.task
+        : state.def.description;
+    const summaryLine = truncateLine(`${summaryLabel}: ${summaryRaw}`, w - 1);
+    lines.push(border(" " + theme.fg("muted", summaryLine), 1 + summaryLine.length));
+
+    if (options.expanded) {
+      for (const detail of getAgentDetailLines(state, w - 1)) {
+        lines.push(border(" " + theme.fg("muted", detail), 1 + detail.length));
+      }
+    } else if (state.def.customSystemPrompt) {
+      const promptText = truncateLine("Custom system prompt ✓", w - 1);
+      lines.push(border(" " + theme.fg("success", promptText), 1 + promptText.length));
+    }
+
+    lines.push(theme.fg(topBorderColor, bot));
     return lines;
   }
 
@@ -462,15 +553,29 @@ export default function (pi: ExtensionAPI) {
             return text.render(width);
           }
 
-          const cols = Math.min(gridCols, agentStates.size);
+          const allAgents = Array.from(agentStates.values());
+          if (widgetState.selectedIndex >= allAgents.length) {
+            widgetState.selectedIndex = Math.max(0, allAgents.length - 1);
+          }
+
+          const agents = widgetState.expandedAgent
+            ? allAgents.filter((agent) => agent.def.name === widgetState.expandedAgent)
+            : allAgents;
+
+          const cols = widgetState.expandedAgent ? 1 : Math.min(gridCols, agents.length);
           const gap = 1;
           const colWidth = Math.floor((width - gap * (cols - 1)) / cols);
-          const agents = Array.from(agentStates.values());
           const rows: string[][] = [];
 
           for (let i = 0; i < agents.length; i += cols) {
             const rowAgents = agents.slice(i, i + cols);
-            const cards = rowAgents.map((a) => renderCard(a, colWidth, theme));
+            const cards = rowAgents.map((agent) => {
+              const selectedAgent = allAgents[widgetState.selectedIndex];
+              return renderCard(agent, colWidth, theme, {
+                expanded: widgetState.expandedAgent === agent.def.name,
+                selected: !widgetState.expandedAgent && selectedAgent?.def.name === agent.def.name,
+              });
+            });
 
             const cardHeight = Math.max(...cards.map((card) => card.length));
 
@@ -482,12 +587,55 @@ export default function (pi: ExtensionAPI) {
             }
           }
 
-          const output = rows.map((cols) => cols.join(" ".repeat(gap)));
-          text.setText(output.join("\n"));
+          const controls = widgetState.expandedAgent
+            ? theme.fg("dim", "Space collapse")
+            : theme.fg("dim", "↑↓←→ move · Space expand");
+          const output = rows.map((columns) => columns.join(" ".repeat(gap)));
+          text.setText(output.concat(["", controls]).join("\n"));
           return text.render(width);
         },
         invalidate() {
           text.invalidate();
+        },
+        handleInput(keyData: string) {
+          const agents = Array.from(agentStates.values());
+          if (agents.length === 0) return;
+
+          if (keyData === " ") {
+            if (widgetState.expandedAgent) {
+              widgetState.expandedAgent = null;
+            } else {
+              const selectedAgent = agents[widgetState.selectedIndex];
+              if (selectedAgent) {
+                widgetState.expandedAgent = selectedAgent.def.name;
+              }
+            }
+            text.invalidate();
+            updateWidget();
+            return;
+          }
+
+          if (widgetState.expandedAgent) {
+            return;
+          }
+
+          const cols = Math.min(gridCols, agents.length);
+          const previousIndex = widgetState.selectedIndex;
+
+          if (keyData === "\u001b[A") {
+            widgetState.selectedIndex = clamp(widgetState.selectedIndex - cols, 0, agents.length - 1);
+          } else if (keyData === "\u001b[B") {
+            widgetState.selectedIndex = clamp(widgetState.selectedIndex + cols, 0, agents.length - 1);
+          } else if (keyData === "\u001b[D") {
+            widgetState.selectedIndex = clamp(widgetState.selectedIndex - 1, 0, agents.length - 1);
+          } else if (keyData === "\u001b[C") {
+            widgetState.selectedIndex = clamp(widgetState.selectedIndex + 1, 0, agents.length - 1);
+          }
+
+          if (widgetState.selectedIndex !== previousIndex) {
+            text.invalidate();
+            updateWidget();
+          }
         },
       };
     });
