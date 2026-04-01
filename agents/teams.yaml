@@ -1,5 +1,11 @@
-small:
+worker-only:
   - worker
+
+small-team:
+  - scout
+  - planner
+  - worker
+  - reviewer
 
 data-migration:
   - source-system-specialist

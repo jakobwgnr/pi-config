@@ -43,6 +43,7 @@ interface AgentDef {
   description: string;
   tools: string;
   systemPrompt: string;
+  customSystemPrompt: string;
   file: string;
 }
 
@@ -90,27 +91,72 @@ function parseTeamsYaml(raw: string): Record<string, string[]> {
 
 // ── Frontmatter Parser ───────────────────────────
 
+function parseSimpleYamlFrontmatter(raw: string): Record<string, string> | null {
+  const result: Record<string, string> = {};
+  const lines = raw.replace(/\r\n/g, "\n").split("\n");
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim() || line.trimStart().startsWith("#")) continue;
+    if (/^\s/.test(line)) return null;
+
+    const idx = line.indexOf(":");
+    if (idx <= 0) return null;
+
+    const key = line.slice(0, idx).trim();
+    let value = line.slice(idx + 1).trim();
+
+    if (value === "|" || value === ">") {
+      const blockLines: string[] = [];
+      i++;
+      for (; i < lines.length; i++) {
+        const blockLine = lines[i];
+        if (!blockLine.trim()) {
+          blockLines.push("");
+          continue;
+        }
+        if (!/^\s+/.test(blockLine)) {
+          i--;
+          break;
+        }
+        blockLines.push(blockLine.replace(/^\s{1,2}/, ""));
+      }
+      value =
+        value === ">"
+          ? blockLines
+              .join("\n")
+              .split("\n\n")
+              .map((paragraph) => paragraph.replace(/\n/g, " ").trim())
+              .join("\n\n")
+          : blockLines.join("\n");
+    } else if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+
+    result[key] = value;
+  }
+
+  return result;
+}
+
 function parseAgentFile(filePath: string): AgentDef | null {
   try {
     const raw = readFileSync(filePath, "utf-8");
     const match = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
     if (!match) return null;
 
-    const frontmatter: Record<string, string> = {};
-    for (const line of match[1].split("\n")) {
-      const idx = line.indexOf(":");
-      if (idx > 0) {
-        frontmatter[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
-      }
-    }
-
-    if (!frontmatter.name) return null;
+    const frontmatter = parseSimpleYamlFrontmatter(match[1]);
+    if (!frontmatter?.name) return null;
 
     return {
       name: frontmatter.name,
       description: frontmatter.description || "",
       tools: frontmatter.tools || "read,grep,find,ls",
       systemPrompt: match[2].trim(),
+      customSystemPrompt: (frontmatter["system-prompt"] || "").trim(),
       file: filePath,
     };
   } catch {
@@ -283,8 +329,17 @@ export default function (pi: ExtensionAPI) {
     const statusStr = `${statusIcon} ${state.status}`;
     const timeStr =
       state.status !== "idle" ? ` ${Math.round(state.elapsed / 1000)}s` : "";
-    const statusLine = theme.fg(statusColor, statusStr + timeStr);
-    const statusVisible = statusStr.length + timeStr.length;
+    const statusText = truncate(statusStr + timeStr, w - 1);
+    const statusLine = theme.fg(statusColor, statusText);
+    const statusVisible = statusText.length;
+
+    const customPromptText = state.def.customSystemPrompt
+      ? truncate("Custom System Prompt ✓", w - 1)
+      : "";
+    const customPromptLine = customPromptText
+      ? theme.fg("success", customPromptText)
+      : "";
+    const customPromptVisible = customPromptText.length;
 
     // Context bar: 5 blocks + percent
     const filled = Math.ceil(state.contextPct / 20);
@@ -308,14 +363,23 @@ export default function (pi: ExtensionAPI) {
       " ".repeat(Math.max(0, w - visLen)) +
       theme.fg("dim", "│");
 
-    return [
+    const lines = [
       theme.fg("dim", top),
       border(" " + nameStr, 1 + nameVisible),
       border(" " + statusLine, 1 + statusVisible),
+    ];
+
+    if (customPromptText) {
+      lines.push(border(" " + customPromptLine, 1 + customPromptVisible));
+    }
+
+    lines.push(
       border(" " + ctxLine, 1 + ctxVisible),
       border(" " + workLine, 1 + workVisible),
       theme.fg("dim", bot),
-    ];
+    );
+
+    return lines;
   }
 
   function clearWidgetAndFooter(ctx = widgetCtx) {
@@ -389,11 +453,11 @@ export default function (pi: ExtensionAPI) {
             const rowAgents = agents.slice(i, i + cols);
             const cards = rowAgents.map((a) => renderCard(a, colWidth, theme));
 
-            while (cards.length < cols) {
-              cards.push(Array(6).fill(" ".repeat(colWidth)));
-            }
+            const cardHeight = Math.max(...cards.map((card) => card.length));
 
-            const cardHeight = cards[0].length;
+            while (cards.length < cols) {
+              cards.push(Array(cardHeight).fill(" ".repeat(colWidth)));
+            }
             for (let line = 0; line < cardHeight; line++) {
               rows.push(cards.map((card) => card[line] || ""));
             }
@@ -492,6 +556,10 @@ export default function (pi: ExtensionAPI) {
     const agentSessionFile = join(sessionDir, `${agentKey}.json`);
 
     // Build args — first run creates session, subsequent runs resume
+    const appendedSystemPrompt = state.def.customSystemPrompt
+      ? `${state.def.systemPrompt}\n\n${state.def.customSystemPrompt}`
+      : state.def.systemPrompt;
+
     const args = [
       "--mode",
       "json",
@@ -504,7 +572,7 @@ export default function (pi: ExtensionAPI) {
       "--thinking",
       "off",
       "--append-system-prompt",
-      state.def.systemPrompt,
+      appendedSystemPrompt,
       "--session",
       agentSessionFile,
     ];
