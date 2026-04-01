@@ -20,7 +20,9 @@
 
 import { type ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import {
+  Key,
   Text,
+  matchesKey,
   truncateToWidth,
   visibleWidth,
   type AutocompleteItem,
@@ -44,6 +46,7 @@ type SystemPromptType = "append" | "replace";
 interface AgentDef {
   name: string;
   description: string;
+  model: string;
   tools: string;
   systemPrompt: string;
   customSystemPrompt: string;
@@ -174,6 +177,7 @@ function parseAgentFile(filePath: string): AgentDef | null {
     return {
       name: frontmatter.name,
       description: frontmatter.description || "",
+      model: (frontmatter.model || "").trim(),
       tools: frontmatter.tools || "read,grep,find,ls",
       systemPrompt: match[2].trim(),
       customSystemPrompt: (frontmatter["system-prompt"] || "").trim(),
@@ -408,6 +412,7 @@ export default function (pi: ExtensionAPI) {
         : state.lastWork || "No recent output",
       contentWidth,
     );
+    const model = truncateLine(`Model: ${state.def.model || "session default"}`, contentWidth);
     const tools = truncateLine(`Tools: ${state.def.tools}`, contentWidth);
     const runs = truncateLine(
       `Runs: ${state.runCount} · Session: ${state.sessionFile ? "resume" : "new"}`,
@@ -418,6 +423,7 @@ export default function (pi: ExtensionAPI) {
       `Role: ${description}`,
       `Task: ${task}`,
       `Doing: ${currentWork}`,
+      model,
       tools,
       runs,
     ];
@@ -453,7 +459,8 @@ export default function (pi: ExtensionAPI) {
     const lines = [theme.fg(topBorderColor, top)];
 
     const namePrefix = options.expanded ? "▼ " : options.selected ? "▸ " : "  ";
-    const nameText = truncateLine(namePrefix + displayName(state.def.name), w - 1);
+    const modelSuffix = state.def.model ? ` [${state.def.model}]` : "";
+    const nameText = truncateLine(namePrefix + displayName(state.def.name) + modelSuffix, w - 1);
     lines.push(
       border(
         " " + theme.fg("accent", theme.bold(nameText)),
@@ -510,10 +517,10 @@ export default function (pi: ExtensionAPI) {
 
     const cols = Math.min(gridCols, agents.length);
     const previousIndex = widgetState.selectedIndex;
-    const moveUp = keyData === "\u001b[1;5A";
-    const moveDown = keyData === "\u001b[1;5B";
-    const moveLeft = keyData === "\u001b[1;5D";
-    const moveRight = keyData === "\u001b[1;5C";
+    const moveUp = matchesKey(keyData, Key.ctrl("up"));
+    const moveDown = matchesKey(keyData, Key.ctrl("down"));
+    const moveLeft = matchesKey(keyData, Key.ctrl("left"));
+    const moveRight = matchesKey(keyData, Key.ctrl("right"));
 
     if (moveUp) {
       widgetState.selectedIndex = clamp(widgetState.selectedIndex - cols, 0, agents.length - 1);
@@ -722,9 +729,9 @@ export default function (pi: ExtensionAPI) {
       updateWidget();
     }, 1000);
 
-    const model = ctx.model
+    const model = state.def.model || (ctx.model
       ? `${ctx.model.provider}/${ctx.model.id}`
-      : "openrouter/google/gemini-3-flash-preview";
+      : "openrouter/google/gemini-3-flash-preview");
 
     // Session file for this agent
     const agentKey = state.def.name.toLowerCase().replace(/\s+/g, "-");

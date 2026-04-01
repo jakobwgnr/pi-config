@@ -57,6 +57,7 @@ function parseAgent(raw) {
 
   return {
     name: frontmatter.name,
+    model: (frontmatter.model || '').trim(),
     customSystemPrompt: (frontmatter['system-prompt'] || '').trim(),
     systemPrompt: frontmatterMatch[2].trim(),
     systemPromptType:
@@ -80,6 +81,17 @@ body instructions
 `);
 
   assert.equal(parsed.systemPromptType, 'replace');
+});
+
+test('agent-team parses agent model from frontmatter', () => {
+  const parsed = parseAgent(`---
+name: demo
+model: gpt-5.4
+---
+body instructions
+`);
+
+  assert.equal(parsed.model, 'gpt-5.4');
 });
 
 test('agent-team accepts explicit append system-prompt-type', () => {
@@ -118,6 +130,10 @@ test('agent-team runtime can use --append-system-prompt for append mode', () => 
   assert.match(source, /"--append-system-prompt"/);
 });
 
+test('agent-team runtime prefers per-agent model from frontmatter', () => {
+  assert.match(source, /const model = state\.def\.model \|\| \(ctx\.model/);
+});
+
 test('agent-team scans global pi agent directory for agent definitions', () => {
   assert.match(
     source,
@@ -145,14 +161,18 @@ test('agent-team empty state mentions global pi agent directory', () => {
   assert.match(source, /~\/\.pi\/agent\/agents\//);
 });
 
-test('agent-team widget handles Ctrl+Arrow escape sequences for navigation and Ctrl+Space to toggle expansion', () => {
-  assert.match(source, /Key\.ctrl\("space"\)/);
-  assert.match(source, /keyData === "\\u001b\[1;5A"/);
-  assert.match(source, /keyData === "\\u001b\[1;5B"/);
-  assert.match(source, /keyData === "\\u001b\[1;5C"/);
-  assert.match(source, /keyData === "\\u001b\[1;5D"/);
+test('agent-team widget handles semantic Ctrl+Arrow navigation and Ctrl+Space to toggle expansion', () => {
+  assert.match(source, /matchesKey\(keyData, Key\.ctrl\("space"\)\)/);
+  assert.match(source, /matchesKey\(keyData, Key\.ctrl\("up"\)\)/);
+  assert.match(source, /matchesKey\(keyData, Key\.ctrl\("down"\)\)/);
+  assert.match(source, /matchesKey\(keyData, Key\.ctrl\("left"\)\)/);
+  assert.match(source, /matchesKey\(keyData, Key\.ctrl\("right"\)\)/);
   assert.match(source, /widgetState\.expandedAgent = selectedAgent\.def\.name/);
   assert.match(source, /widgetState\.expandedAgent = null/);
+  assert.doesNotMatch(source, /keyData === "\\u001b\[1;5A"/);
+  assert.doesNotMatch(source, /keyData === "\\u001b\[1;5B"/);
+  assert.doesNotMatch(source, /keyData === "\\u001b\[1;5C"/);
+  assert.doesNotMatch(source, /keyData === "\\u001b\[1;5D"/);
   assert.doesNotMatch(source, /keyData === " "/);
   assert.doesNotMatch(source, /keyData === "\\u0000"/);
 });
@@ -172,6 +192,11 @@ test('agent-team widget instructions mention Ctrl+Arrow navigation and Ctrl+Spac
   assert.doesNotMatch(source, /Space\/Ctrl\+Space to collapse/);
 });
 
+
+test('agent-team widget shows configured model beside agent name and in expanded details', () => {
+  assert.match(source, /const modelSuffix = state\.def\.model \? ` \[\$\{state\.def\.model\}\]` : ""/);
+  assert.match(source, /Model: \$\{state\.def\.model \|\| "session default"\}/);
+});
 
 test('agent-team expanded card shows active work details', () => {
   assert.match(source, /Doing: \$\{currentWork\}/);
