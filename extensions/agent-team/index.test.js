@@ -184,12 +184,10 @@ test('agent-team no longer registers a focus command or focus overlay UI', () =>
   assert.doesNotMatch(source, /focus mode/);
 });
 
-test('agent-team widget instructions mention Ctrl+Arrow navigation and Ctrl+Space expansion only', () => {
-  assert.match(source, /Ctrl\+Arrow to navigate · Ctrl\+Space to expand/);
-  assert.match(source, /Ctrl\+Space to collapse/);
-  assert.doesNotMatch(source, /Arrow\/Ctrl\+Arrow to navigate/);
-  assert.doesNotMatch(source, /Space\/Ctrl\+Space to expand/);
-  assert.doesNotMatch(source, /Space\/Ctrl\+Space to collapse/);
+test('agent-team widget instructions mention new terminal-friendly keys in on-screen help', () => {
+  assert.match(source, /Arrows\/hjkl to navigate · Enter\/Space to expand/);
+  assert.match(source, /Esc\/Backspace\/Left\/q\/Space\/Enter to collapse/);
+  assert.doesNotMatch(source, /collapse, arrows/);
 });
 
 

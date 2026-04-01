@@ -501,7 +501,13 @@ export default function (pi: ExtensionAPI) {
     const agents = Array.from(agentStates.values());
     if (agents.length === 0) return false;
 
-    if (matchesKey(keyData, Key.ctrl("space"))) {
+    // --- Expand/Collapse ---
+    // Terminal-friendly: Enter/Space or Ctrl+Space to expand/collapse
+    if (
+      matchesKey(keyData, Key.ctrl("space")) || // old binding
+      matchesKey(keyData, Key.enter) ||
+      matchesKey(keyData, Key.space)
+    ) {
       if (widgetState.expandedAgent) {
         widgetState.expandedAgent = null;
       } else {
@@ -513,14 +519,34 @@ export default function (pi: ExtensionAPI) {
       return true;
     }
 
-    if (widgetState.expandedAgent) return false;
+    // --- Collapse (when expanded) ---
+    if (widgetState.expandedAgent) {
+      if (
+        matchesKey(keyData, Key.esc) ||
+        matchesKey(keyData, Key.backspace) ||
+        matchesKey(keyData, Key.left) ||
+        matchesKey(keyData, Key.q) ||
+        matchesKey(keyData, Key.ctrl("space")) ||
+        matchesKey(keyData, Key.space) || // pressing Space collapses also
+        matchesKey(keyData, Key.enter) // or Enter
+      ) {
+        widgetState.expandedAgent = null;
+        return true;
+      }
+      return false;
+    }
 
+    // --- Navigation: arrows and hjkl, plus old ctrl+arrow aliases ---
     const cols = Math.min(gridCols, agents.length);
     const previousIndex = widgetState.selectedIndex;
-    const moveUp = matchesKey(keyData, Key.ctrl("up"));
-    const moveDown = matchesKey(keyData, Key.ctrl("down"));
-    const moveLeft = matchesKey(keyData, Key.ctrl("left"));
-    const moveRight = matchesKey(keyData, Key.ctrl("right"));
+    const moveUp =
+      matchesKey(keyData, Key.up) || matchesKey(keyData, Key.k) || matchesKey(keyData, Key.ctrl("up"));
+    const moveDown =
+      matchesKey(keyData, Key.down) || matchesKey(keyData, Key.j) || matchesKey(keyData, Key.ctrl("down"));
+    const moveLeft =
+      matchesKey(keyData, Key.left) || matchesKey(keyData, Key.h) || matchesKey(keyData, Key.ctrl("left"));
+    const moveRight =
+      matchesKey(keyData, Key.right) || matchesKey(keyData, Key.l) || matchesKey(keyData, Key.ctrl("right"));
 
     if (moveUp) {
       widgetState.selectedIndex = clamp(widgetState.selectedIndex - cols, 0, agents.length - 1);
@@ -635,9 +661,19 @@ export default function (pi: ExtensionAPI) {
             }
           }
 
-          const controls = widgetState.expandedAgent
-            ? theme.fg("dim", "Ctrl+Space to collapse")
-            : theme.fg("dim", "Ctrl+Arrow to navigate · Ctrl+Space to expand");
+          // On-screen help text
+          let controls: string;
+          if (widgetState.expandedAgent) {
+            controls = theme.fg(
+              "dim",
+              "Esc/Backspace/Left/q/Space/Enter to collapse"
+            );
+          } else {
+            controls = theme.fg(
+              "dim",
+              "Arrows/hjkl to navigate · Enter/Space to expand"
+            );
+          }
           const output = rows.map((columns) => columns.join(" ".repeat(gap)));
           text.setText(output.concat(["", controls]).join("\n"));
           return text.render(width);
