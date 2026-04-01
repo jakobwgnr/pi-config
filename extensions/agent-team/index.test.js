@@ -125,6 +125,22 @@ test('agent-team scans global pi agent directory for agent definitions', () => {
   );
 });
 
+test('dmi-development-team includes the etl-designer agent', () => {
+  const teamsSource = readFileSync(join(__dirname, '..', '..', 'agents', 'teams.yaml'), 'utf8');
+  assert.match(teamsSource, /dmi-development-team:[\s\S]*- etl-designer/);
+});
+
+test('etl-designer agent definition declares adamms skill and readiness workflow', () => {
+  const raw = readFileSync(join(__dirname, '..', '..', 'agents', 'etl-designer.md'), 'utf8');
+  const parsed = parseAgent(raw);
+
+  assert.equal(parsed.name, 'etl-designer');
+  assert.match(raw, /^skill: adamms$/m);
+  assert.match(raw, /status `done`/);
+  assert.match(raw, /\/answer/);
+  assert.match(raw, /UNION/i);
+});
+
 test('agent-team empty state mentions global pi agent directory', () => {
   assert.match(source, /~\/\.pi\/agent\/agents\//);
 });

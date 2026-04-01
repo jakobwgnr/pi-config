@@ -7,9 +7,14 @@ small-team:
   - worker
   - reviewer
 
-data-migration:
+dmi-mapping-team:
+  - data-mapping-manager
   - source-system-specialist
   - target-system-specialist
-  - data-mapping-expert
-  - etl-development-expert
+  - data-mapping-specialist
+
+dmi-development-team:
+  - etl-designer
+  - scout
+  - etl-developer
   - reviewer

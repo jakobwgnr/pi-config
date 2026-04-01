@@ -169,6 +169,7 @@ You can execute slash commands yourself using the `execute_command` tool:
 | `researcher` | Deep research using parallel.ai tools as primary, Claude Code as fallback for code analysis | gpt-5.4 |
 | `planner` | Interactive brainstorming and planning — clarifies requirements, explores approaches, writes plans, creates todos | gpt-5.4 (medium thinking) |
 | `visual-tester` | Visual QA for web UIs using Chrome CDP tooling | gpt-4.1 |
+| `etl-designer` | Designs ETL implementation plans from ADAMMS rules, validates mapping readiness, and briefs `etl-developer` | gpt-5.4 |
 
 #### Subagents
 
@@ -182,6 +183,7 @@ subagent({ name: "Scout", agent: "scout", interactive: false, task: "Analyze the
 subagent({ name: "Worker", agent: "worker", interactive: false, task: "Implement TODO-xxxx..." })
 subagent({ name: "Reviewer", agent: "reviewer", interactive: false, task: "Review recent changes..." })
 subagent({ name: "Researcher", agent: "researcher", interactive: false, task: "Research [topic]..." })
+subagent({ name: "ETL Designer", agent: "etl-designer", interactive: false, task: "Analyze ADAMMS rules, validate readiness, and plan ETL implementation..." })
 
 // Planner — interactive, loads config from ~/.pi/agent/agents/planner.md
 subagent({
@@ -224,6 +226,7 @@ subagent({
 - **Code review needed** → Delegate to `reviewer`
 - **Need context first** → Start with `scout`
 - **Web research or external info needed** → Delegate to `researcher` (uses parallel.ai tools for web, Claude Code for code analysis)
+- **ADAMMS-backed ETL planning needed** → Delegate to `etl-designer`
 
 #### When NOT to Delegate
 

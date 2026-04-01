@@ -56,7 +56,12 @@ Specialized roles with baked-in identity, workflow, and review rubrics.
 | **reviewer** | gpt-5.4 | Reviews code for quality, security, correctness (review rubric baked in) |
 | **researcher** | gpt-5.4 | Deep research using parallel.ai tools + Claude Code for code analysis |
 | **visual-tester** | gpt-4.1 | Visual QA for web UIs using Chrome CDP tooling |
-| **etl-development-expert** | gpt-5.4 | Implements ETL processes from approved mappings, including Rogue-based ETL repositories |
+| **data-mapping-manager** | gpt-5.4 | Coordinates source, target, and mapping specialists to drive evidence-based mapping decisions |
+| **source-system-specialist** | gpt-5.4 | Analyzes legacy/source structures, semantics, and data quality for migrations |
+| **target-system-specialist** | gpt-5.4 | Analyzes destination structures, constraints, and migration-ready target rules |
+| **data-mapping-specialist** | gpt-5.4 | Investigates mapping-rule coverage, transformations, and ADAMMS mapping logic |
+| **etl-designer** | gpt-5.4 | Designs ETL implementation plans from ADAMMS rules, validates mapping readiness, and briefs `etl-developer` |
+| **etl-developer** | gpt-5.4 | Implements ETL processes from approved mappings, including Rogue-based ETL repositories |
 
 `agents/autoresearch.md` is present as an experimental agent definition, but it depends on custom experiment tools that are not provisioned by this repo.
 
@@ -75,6 +80,7 @@ Loaded on-demand when the context matches.
 | **add-mcp-server** | Adding MCP server configurations |
 | **plan** | Running the planner-led planning workflow |
 | **rogue** | Inspecting Rogue job repositories with `rogue/` jobs and `templates/` templates |
+| **adamms** | Inspecting ADAMMS projects, systems, fields, tables, and rules through the CLI |
 
 ## Local Extensions
 
@@ -105,6 +111,10 @@ Installed by `setup.sh` and managed in `settings.json`.
 ## Agent Discovery
 
 Pi auto-discovers agent definitions in this repo's `agents/` directory. The `agent-team` extension also loads agent definitions from project-local `.pi/agents/` and global `~/.pi/agent/agents/`, mirroring how it already falls back to the global `teams.yaml`.
+
+The default `dmi-mapping-team` is composed of `data-mapping-manager`, `source-system-specialist`, `target-system-specialist`, and `data-mapping-specialist`.
+
+The `dmi-development-team` is composed of `etl-designer`, `scout`, `etl-developer`, and `reviewer`.
 
 ## Commands
 
