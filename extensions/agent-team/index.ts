@@ -150,7 +150,13 @@ function findTeamsPath(cwd: string): string | null {
   const localTeamsPath = join(cwd, ".pi", "agents", "teams.yaml");
   if (existsSync(localTeamsPath)) return localTeamsPath;
 
-  const globalTeamsPath = join(homedir(), ".pi", "agents", "teams.yaml");
+  const globalTeamsPath = join(
+    homedir(),
+    ".pi",
+    "agent",
+    "agents",
+    "teams.yaml",
+  );
   if (existsSync(globalTeamsPath)) return globalTeamsPath;
 
   return null;
@@ -352,7 +358,9 @@ export default function (pi: ExtensionAPI) {
     if (!ctx) return;
     ctx.ui.setStatus(
       "agent-team",
-      isActive ? `Team: ${activeTeamName} (${agentStates.size})` : "Team: disabled",
+      isActive
+        ? `Team: ${activeTeamName} (${agentStates.size})`
+        : "Team: disabled",
     );
   }
 
@@ -432,7 +440,8 @@ export default function (pi: ExtensionAPI) {
   ): Promise<{ output: string; exitCode: number; elapsed: number }> {
     if (!isActive) {
       return Promise.resolve({
-        output: "Agent team is deactivated. dispatch_agent is unavailable for this session.",
+        output:
+          "Agent team is deactivated. dispatch_agent is unavailable for this session.",
         exitCode: 1,
         elapsed: 0,
       });
