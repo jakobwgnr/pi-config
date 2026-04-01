@@ -1,0 +1,3624 @@
+TAP version 13
+# Subtest: agent-team defaults system-prompt-type to replace
+ok 1 - agent-team defaults system-prompt-type to replace
+  ---
+  duration_ms: 0.725801
+  ...
+# Subtest: agent-team parses agent model from frontmatter
+ok 2 - agent-team parses agent model from frontmatter
+  ---
+  duration_ms: 0.203121
+  ...
+# Subtest: agent-team accepts explicit append system-prompt-type
+ok 3 - agent-team accepts explicit append system-prompt-type
+  ---
+  duration_ms: 0.768884
+  ...
+# Subtest: agent-team builds combined prompt with custom prompt prepended to body
+ok 4 - agent-team builds combined prompt with custom prompt prepended to body
+  ---
+  duration_ms: 0.165826
+  ...
+# Subtest: agent-team runtime uses --system-prompt for default replace mode
+ok 5 - agent-team runtime uses --system-prompt for default replace mode
+  ---
+  duration_ms: 0.246453
+  ...
+# Subtest: agent-team runtime can use --append-system-prompt for append mode
+ok 6 - agent-team runtime can use --append-system-prompt for append mode
+  ---
+  duration_ms: 0.083646
+  ...
+# Subtest: agent-team runtime prefers per-agent model from frontmatter
+ok 7 - agent-team runtime prefers per-agent model from frontmatter
+  ---
+  duration_ms: 0.067835
+  ...
+# Subtest: agent-team scans global pi agent directory for agent definitions
+ok 8 - agent-team scans global pi agent directory for agent definitions
+  ---
+  duration_ms: 0.070154
+  ...
+# Subtest: dmi-development-team includes the etl-designer agent
+ok 9 - dmi-development-team includes the etl-designer agent
+  ---
+  duration_ms: 0.26904
+  ...
+# Subtest: etl-designer agent definition declares adamms skill and readiness workflow
+ok 10 - etl-designer agent definition declares adamms skill and readiness workflow
+  ---
+  duration_ms: 0.379127
+  ...
+# Subtest: agent-team empty state mentions global pi agent directory
+ok 11 - agent-team empty state mentions global pi agent directory
+  ---
+  duration_ms: 0.135365
+  ...
+# Subtest: agent-team widget handles semantic Ctrl+Arrow navigation and Ctrl+Space to toggle expansion
+not ok 12 - agent-team widget handles semantic Ctrl+Arrow navigation and Ctrl+Space to toggle expansion
+  ---
+  duration_ms: 1.209665
+  location: '/home/jakobwgnr/projects/pi-config/extensions/agent-team/index.test.js:164:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /matchesKey\(keyData, Key\.ctrl\("space"\)\)/. Input:
+    
+    '/**\n' +
+      ' * Agent Team — Dispatcher-only orchestrator with grid dashboard\n' +
+      ' *\n' +
+      ' * The primary Pi agent has NO codebase tools. It can ONLY delegate work\n' +
+      ' * to specialist agents via the `dispatch_agent` tool. Each specialist\n' +
+      ' * maintains its own Pi session for cross-invocation memory.\n' +
+      ' *\n' +
+      ' * Loads agent definitions from agents/*.md, .claude/agents/*.md, .pi/agents/*.md,\n' +
+      ' * and ~/.pi/agent/agents/*.md.\n' +
+      ' * Teams are defined in .pi/agents/teams.yaml — on boot a select dialog lets\n' +
+      ' * you pick which team to work with. Only team members are available for dispatch.\n' +
+      ' *\n' +
+      ' * Commands:\n' +
+      ' *   /agents-team          — switch active team\n' +
+      ' *   /agents-list          — list loaded agents\n' +
+      ' *   /agents-grid N        — set column count (default 2)\n' +
+      ' *\n' +
+      ' * Usage: pi -e extensions/agent-team.ts\n' +
+      ' */\n' +
+      '\n' +
+      'import { type ExtensionAPI } from "@mariozechner/pi-coding-agent";\n' +
+      'import {\n' +
+      '  Key,\n' +
+      '  Text,\n' +
+      '  matchesKey,\n' +
+      '  truncateToWidth,\n' +
+      '  visibleWidth,\n' +
+      '  type AutocompleteItem,\n' +
+      '} from "@mariozechner/pi-tui";\n' +
+      'import { Type } from "@sinclair/typebox";\n' +
+      'import { spawn } from "child_process";\n' +
+      'import {\n' +
+      '  existsSync,\n' +
+      '  mkdirSync,\n' +
+      '  readdirSync,\n' +
+      '  readFileSync,\n' +
+      '  unlinkSync,\n' +
+      '} from "fs";\n' +
+      'import { homedir } from "os";\n' +
+      'import { join, resolve } from "path";\n' +
+      '\n' +
+      '// ── Types ────────────────────────────────────────\n' +
+      '\n' +
+      'type SystemPromptType = "append" | "replace";\n' +
+      '\n' +
+      'interface AgentDef {\n' +
+      '  name: string;\n' +
+      '  description: string;\n' +
+      '  model: string;\n' +
+      '  tools: string;\n' +
+      '  systemPrompt: string;\n' +
+      '  customSystemPrompt: string;\n' +
+      '  systemPromptType: SystemPromptType;\n' +
+      '  file: string;\n' +
+      '}\n' +
+      '\n' +
+      'interface AgentState {\n' +
+      '  def: AgentDef;\n' +
+      '  status: "idle" | "running" | "done" | "error" | "disabled";\n' +
+      '  task: string;\n' +
+      '  toolCount: number;\n' +
+      '  elapsed: number;\n' +
+      '  lastWork: string;\n' +
+      '  contextPct: number;\n' +
+      '  sessionFile: string | null;\n' +
+      '  runCount: number;\n' +
+      '  timer?: ReturnType<typeof setInterval>;\n' +
+      '}\n' +
+      '\n' +
+      'interface AgentWidgetState {\n' +
+      '  selectedIndex: number;\n' +
+      '  expandedAgent: string | null;\n' +
+      '}\n' +
+      '\n' +
+      '\n' +
+      '// ── Display Name Helper ──────────────────────────\n' +
+      '\n' +
+      'function displayName(name: string): string {\n' +
+      '  return name\n' +
+      '    .split("-")\n' +
+      '    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))\n' +
+      '    .join(" ");\n' +
+      '}\n' +
+      '\n' +
+      '// ── Teams YAML Parser ────────────────────────────\n' +
+      '\n' +
+      'function parseTeamsYaml(raw: string): Record<string, string[]> {\n' +
+      '  const teams: Record<string, string[]> = {};\n' +
+      '  let current: string | null = null;\n' +
+      '  for (const line of raw.split("\\n")) {\n' +
+      '    const teamMatch = line.match(/^(\\S[^:]*):$/);\n' +
+      '    if (teamMatch) {\n' +
+      '      current = teamMatch[1].trim();\n' +
+      '      teams[current] = [];\n' +
+      '      continue;\n' +
+      '    }\n' +
+      '    const itemMatch = line.match(/^\\s+-\\s+(.+)$/);\n' +
+      '    if (itemMatch && current) {\n' +
+      '      teams[current].push(itemMatch[1].trim());\n' +
+      '    }\n' +
+      '  }\n' +
+      '  return teams;\n' +
+      '}\n' +
+      '\n' +
+      '// ── Frontmatter Parser ───────────────────────────\n' +
+      '\n' +
+      'function parseSimpleYamlFrontmatter(raw: string): Record<string, string> | null {\n' +
+      '  const result: Record<string, string> = {};\n' +
+      '  const lines = raw.replace(/\\r\\n/g, "\\n").split("\\n");\n' +
+      '\n' +
+      '  for (let i = 0; i < lines.length; i++) {\n' +
+      '    const line = lines[i];\n' +
+      '    if (!line.trim() || line.trimStart().startsWith("#")) continue;\n' +
+      '    if (/^\\s/.test(line)) return null;\n' +
+      '\n' +
+      '    const idx = line.indexOf(":");\n' +
+      '    if (idx <= 0) return null;\n' +
+      '\n' +
+      '    const key = line.slice(0, idx).trim();\n' +
+      '    let value = line.slice(idx + 1).trim();\n' +
+      '\n' +
+      '    if (value === "|" || value === ">") {\n' +
+      '      const blockLines: string[] = [];\n' +
+      '      i++;\n' +
+      '      for (; i < lines.length; i++) {\n' +
+      '        const blockLine = lines[i];\n' +
+      '        if (!blockLine.trim()) {\n' +
+      '          blockLines.push("");\n' +
+      '          continue;\n' +
+      '        }\n' +
+      '        if (!/^\\s+/.test(blockLine)) {\n' +
+      '          i--;\n' +
+      '          break;\n' +
+      '        }\n' +
+      '        blockLines.push(blockLine.replace(/^\\s{1,2}/, ""));\n' +
+      '      }\n' +
+      '      value =\n' +
+      '        value === ">"\n' +
+      '          ? blockLines\n' +
+      '              .join("\\n")\n' +
+      '              .split("\\n\\n")\n' +
+      '              .map((paragraph) => paragraph.replace(/\\n/g, " ").trim())\n' +
+      '              .join("\\n\\n")\n' +
+      '          : blockLines.join("\\n");\n' +
+      '    } else if (\n' +
+      `      (value.startsWith('"') && value.endsWith('"')) ||\n` +
+      `      (value.startsWith("'") && value.endsWith("'"))\n` +
+      '    ) {\n' +
+      '      value = value.slice(1, -1);\n' +
+      '    }\n' +
+      '\n' +
+      '    result[key] = value;\n' +
+      '  }\n' +
+      '\n' +
+      '  return result;\n' +
+      '}\n' +
+      '\n' +
+      'function parseSystemPromptType(value?: string): SystemPromptType {\n' +
+      '  return value === "append" ? "append" : "replace";\n' +
+      '}\n' +
+      '\n' +
+      'function buildAgentSystemPrompt(def: Pick<AgentDef, "customSystemPrompt" | "systemPrompt">): string {\n' +
+      '  return [def.customSystemPrompt, def.systemPrompt]\n' +
+      '    .filter((part) => part.trim().length > 0)\n' +
+      '    .join("\\n\\n");\n' +
+      '}\n' +
+      '\n' +
+      'function parseAgentFile(filePath: string): AgentDef | null {\n' +
+      '  try {\n' +
+      '    const raw = readFileSync(filePath, "utf-8");\n' +
+      '    const match = raw.match(/^---\\n([\\s\\S]*?)\\n---\\n([\\s\\S]*)$/);\n' +
+      '    if (!match) return null;\n' +
+      '\n' +
+      '    const frontmatter = parseSimpleYamlFrontmatter(match[1]);\n' +
+      '    if (!frontmatter?.name) return null;\n' +
+      '\n' +
+      '    return {\n' +
+      '      name: frontmatter.name,\n' +
+      '      description: frontmatter.description || "",\n' +
+      '      model: (frontmatter.model || "").trim(),\n' +
+      '      tools: frontmatter.tools || "read,grep,find,ls",\n' +
+      '      systemPrompt: match[2].trim(),\n' +
+      '      customSystemPrompt: (frontmatter["system-prompt"] || "").trim(),\n' +
+      '      systemPromptType: parseSystemPromptType(frontmatter["system-prompt-type"]),\n' +
+      '      file: filePath,\n' +
+      '    };\n' +
+      '  } catch {\n' +
+      '    return null;\n' +
+      '  }\n' +
+      '}\n' +
+      '\n' +
+      'function scanAgentDirs(cwd: string): AgentDef[] {\n' +
+      '  const dirs = [\n' +
+      '    join(cwd, "agents"),\n' +
+      '    join(cwd, ".claude", "agents"),\n' +
+      '    join(cwd, ".pi", "agents"),\n' +
+      '    join(homedir(), ".pi", "agent", "agents"),\n' +
+      '  ];\n' +
+      '\n' +
+      '  const agents: AgentDef[] = [];\n' +
+      '  const seen = new Set<string>();\n' +
+      '\n' +
+      '  for (const dir of dirs) {\n' +
+      '    if (!existsSync(dir)) continue;\n' +
+      '    try {\n' +
+      '      for (const file of readdirSync(dir)) {\n' +
+      '        if (!file.endsWith(".md")) continue;\n' +
+      '        const fullPath = resolve(dir, file);\n' +
+      '        const def = parseAgentFile(fullPath);\n' +
+      '        if (def && !seen.has(def.name.toLowerCase())) {\n' +
+      '          seen.add(def.name.toLowerCase());\n' +
+      '          agents.push(def);\n' +
+      '        }\n' +
+      '      }\n' +
+      '    } catch {}\n' +
+      '  }\n' +
+      '\n' +
+      '  return agents;\n' +
+      '}\n' +
+      '\n' +
+      'function findTeamsPath(cwd: string): string | null {\n' +
+      '  const localTeamsPath = join(cwd, ".pi", "agents", "teams.yaml");\n' +
+      '  if (existsSync(localTeamsPath)) return localTeamsPath;\n' +
+      '\n' +
+      '  const globalTeamsPath = join(\n' +
+      '    homedir(),\n' +
+      '    ".pi",\n' +
+      '    "agent",\n' +
+      '    "agents",\n' +
+      '    "teams.yaml",\n' +
+      '  );\n' +
+      '  if (existsSync(globalTeamsPath)) return globalTeamsPath;\n' +
+      '\n' +
+      '  return null;\n' +
+      '}\n' +
+      '\n' +
+      'function formatTeamsSource(cwd: string, teamsPath: string | null): string {\n' +
+      '  if (!teamsPath) return "generated default team";\n' +
+      '  return teamsPath === join(cwd, ".pi", "agents", "teams.yaml")\n' +
+      '    ? ".pi/agents/teams.yaml"\n' +
+      '    : "~/.pi/agent/agents/teams.yaml";\n' +
+      '}\n' +
+      '\n' +
+      '// ── Extension ────────────────────────────────────\n' +
+      '\n' +
+      'export default function (pi: ExtensionAPI) {\n' +
+      '  const agentStates: Map<string, AgentState> = new Map();\n' +
+      '  let allAgentDefs: AgentDef[] = [];\n' +
+      '  let teams: Record<string, string[]> = {};\n' +
+      '  let activeTeamName = "";\n' +
+      '  let gridCols = 2;\n' +
+      '  let widgetCtx: any;\n' +
+      '  let sessionDir = "";\n' +
+      '  let contextWindow = 0;\n' +
+      '  let isActive = true;\n' +
+      '  let previousActiveTools: string[] | null = null;\n' +
+      '  let teamsSource = "generated default team";\n' +
+      '  const widgetState: AgentWidgetState = {\n' +
+      '    selectedIndex: 0,\n' +
+      '    expandedAgent: null,\n' +
+      '  };\n' +
+      '\n' +
+      '  function loadAgents(cwd: string) {\n' +
+      '    // Create session storage dir\n' +
+      '    sessionDir = join(cwd, ".pi", "agent-sessions");\n' +
+      '    if (!existsSync(sessionDir)) {\n' +
+      '      mkdirSync(sessionDir, { recursive: true });\n' +
+      '    }\n' +
+      '\n' +
+      '    // Load all agent definitions\n' +
+      '    allAgentDefs = scanAgentDirs(cwd);\n' +
+      '\n' +
+      '    // Load teams from project-local or global config\n' +
+      '    const teamsPath = findTeamsPath(cwd);\n' +
+      '    teamsSource = formatTeamsSource(cwd, teamsPath);\n' +
+      '    if (teamsPath) {\n' +
+      '      try {\n' +
+      '        teams = parseTeamsYaml(readFileSync(teamsPath, "utf-8"));\n' +
+      '      } catch {\n' +
+      '        teams = {};\n' +
+      '      }\n' +
+      '    } else {\n' +
+      '      teams = {};\n' +
+      '    }\n' +
+      '\n' +
+      '    // If no teams defined, create a default "all" team\n' +
+      '    if (Object.keys(teams).length === 0) {\n' +
+      '      teams = { all: allAgentDefs.map((d) => d.name) };\n' +
+      '    }\n' +
+      '  }\n' +
+      '\n' +
+      '  function activateTeam(teamName: string) {\n' +
+      '    activeTeamName = teamName;\n' +
+      '    const members = teams[teamName] || [];\n' +
+      '    const defsByName = new Map(\n' +
+      '      allAgentDefs.map((d) => [d.name.toLowerCase(), d]),\n' +
+      '    );\n' +
+      '\n' +
+      '    agentStates.clear();\n' +
+      '    for (const member of members) {\n' +
+      '      const def = defsByName.get(member.toLowerCase());\n' +
+      '      if (!def) continue;\n' +
+      '      const key = def.name.toLowerCase().replace(/\\s+/g, "-");\n' +
+      '      const sessionFile = join(sessionDir, `${key}.json`);\n' +
+      '      agentStates.set(def.name.toLowerCase(), {\n' +
+      '        def,\n' +
+      '        status: "idle",\n' +
+      '        task: "",\n' +
+      '        toolCount: 0,\n' +
+      '        elapsed: 0,\n' +
+      '        lastWork: "",\n' +
+      '        contextPct: 0,\n' +
+      '        sessionFile: existsSync(sessionFile) ? sessionFile : null,\n' +
+      '        runCount: 0,\n' +
+      '      });\n' +
+      '    }\n' +
+      '\n' +
+      '    // Auto-size grid columns based on team size\n' +
+      '    const size = agentStates.size;\n' +
+      '    gridCols = size <= 3 ? size : size === 4 ? 2 : 3;\n' +
+      '    widgetState.selectedIndex = 0;\n' +
+      '    widgetState.expandedAgent = null;\n' +
+      '  }\n' +
+      '\n' +
+      '  // ── Grid Rendering ───────────────────────────\n' +
+      '\n' +
+      '  function clamp(value: number, min: number, max: number): number {\n' +
+      '    return Math.max(min, Math.min(max, value));\n' +
+      '  }\n' +
+      '\n' +
+      '  function truncateLine(text: string, width: number): string {\n' +
+      '    if (width <= 0) return "";\n' +
+      '    if (text.length <= width) return text;\n' +
+      '    if (width <= 3) return ".".repeat(width);\n' +
+      '    return text.slice(0, width - 3) + "...";\n' +
+      '  }\n' +
+      '\n' +
+      '  function wrapText(text: string, width: number, maxLines: number): string[] {\n' +
+      '    if (width <= 0 || maxLines <= 0) return [];\n' +
+      '\n' +
+      '    const words = text.replace(/\\s+/g, " ").trim().split(" ").filter(Boolean);\n' +
+      '    if (words.length === 0) return [""];\n' +
+      '\n' +
+      '    const lines: string[] = [];\n' +
+      '    let current = "";\n' +
+      '\n' +
+      '    for (const word of words) {\n' +
+      '      if (!current) {\n' +
+      '        current = word.length > width ? truncateLine(word, width) : word;\n' +
+      '        continue;\n' +
+      '      }\n' +
+      '\n' +
+      '      if (`${current} ${word}`.length <= width) {\n' +
+      '        current += ` ${word}`;\n' +
+      '        continue;\n' +
+      '      }\n' +
+      '\n' +
+      '      lines.push(current);\n' +
+      '      if (lines.length === maxLines) {\n' +
+      '        return lines;\n' +
+      '      }\n' +
+      ' '... 34168 more characters
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: |-
+    /**
+     * Agent Team — Dispatcher-only orchestrator with grid dashboard
+     *
+     * The primary Pi agent has NO codebase tools. It can ONLY delegate work
+     * to specialist agents via the `dispatch_agent` tool. Each specialist
+     * maintains its own Pi session for cross-invocation memory.
+     *
+     * Loads agent definitions from agents/*.md, .claude/agents/*.md, .pi/agents/*.md,
+     * and ~/.pi/agent/agents/*.md.
+     * Teams are defined in .pi/agents/teams.yaml — on boot a select dialog lets
+     * you pick which team to work with. Only team members are available for dispatch.
+     *
+     * Commands:
+     *   /agents-team          — switch active team
+     *   /agents-list          — list loaded agents
+     *   /agents-grid N        — set column count (default 2)
+     *
+     * Usage: pi -e extensions/agent-team.ts
+     */
+    
+    import { type ExtensionAPI } from "@mariozechner/pi-coding-agent";
+    import {
+      Key,
+      Text,
+      matchesKey,
+      truncateToWidth,
+      visibleWidth,
+      type AutocompleteItem,
+    } from "@mariozechner/pi-tui";
+    import { Type } from "@sinclair/typebox";
+    import { spawn } from "child_process";
+    import {
+      existsSync,
+      mkdirSync,
+      readdirSync,
+      readFileSync,
+      unlinkSync,
+    } from "fs";
+    import { homedir } from "os";
+    import { join, resolve } from "path";
+    
+    // ── Types ────────────────────────────────────────
+    
+    type SystemPromptType = "append" | "replace";
+    
+    interface AgentDef {
+      name: string;
+      description: string;
+      model: string;
+      tools: string;
+      systemPrompt: string;
+      customSystemPrompt: string;
+      systemPromptType: SystemPromptType;
+      file: string;
+    }
+    
+    interface AgentState {
+      def: AgentDef;
+      status: "idle" | "running" | "done" | "error" | "disabled";
+      task: string;
+      toolCount: number;
+      elapsed: number;
+      lastWork: string;
+      contextPct: number;
+      sessionFile: string | null;
+      runCount: number;
+      timer?: ReturnType<typeof setInterval>;
+    }
+    
+    interface AgentWidgetState {
+      selectedIndex: number;
+      expandedAgent: string | null;
+    }
+    
+    
+    // ── Display Name Helper ──────────────────────────
+    
+    function displayName(name: string): string {
+      return name
+        .split("-")
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ");
+    }
+    
+    // ── Teams YAML Parser ────────────────────────────
+    
+    function parseTeamsYaml(raw: string): Record<string, string[]> {
+      const teams: Record<string, string[]> = {};
+      let current: string | null = null;
+      for (const line of raw.split("\n")) {
+        const teamMatch = line.match(/^(\S[^:]*):$/);
+        if (teamMatch) {
+          current = teamMatch[1].trim();
+          teams[current] = [];
+          continue;
+        }
+        const itemMatch = line.match(/^\s+-\s+(.+)$/);
+        if (itemMatch && current) {
+          teams[current].push(itemMatch[1].trim());
+        }
+      }
+      return teams;
+    }
+    
+    // ── Frontmatter Parser ───────────────────────────
+    
+    function parseSimpleYamlFrontmatter(raw: string): Record<string, string> | null {
+      const result: Record<string, string> = {};
+      const lines = raw.replace(/\r\n/g, "\n").split("\n");
+    
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (!line.trim() || line.trimStart().startsWith("#")) continue;
+        if (/^\s/.test(line)) return null;
+    
+        const idx = line.indexOf(":");
+        if (idx <= 0) return null;
+    
+        const key = line.slice(0, idx).trim();
+        let value = line.slice(idx + 1).trim();
+    
+        if (value === "|" || value === ">") {
+          const blockLines: string[] = [];
+          i++;
+          for (; i < lines.length; i++) {
+            const blockLine = lines[i];
+            if (!blockLine.trim()) {
+              blockLines.push("");
+              continue;
+            }
+            if (!/^\s+/.test(blockLine)) {
+              i--;
+              break;
+            }
+            blockLines.push(blockLine.replace(/^\s{1,2}/, ""));
+          }
+          value =
+            value === ">"
+              ? blockLines
+                  .join("\n")
+                  .split("\n\n")
+                  .map((paragraph) => paragraph.replace(/\n/g, " ").trim())
+                  .join("\n\n")
+              : blockLines.join("\n");
+        } else if (
+          (value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'"))
+        ) {
+          value = value.slice(1, -1);
+        }
+    
+        result[key] = value;
+      }
+    
+      return result;
+    }
+    
+    function parseSystemPromptType(value?: string): SystemPromptType {
+      return value === "append" ? "append" : "replace";
+    }
+    
+    function buildAgentSystemPrompt(def: Pick<AgentDef, "customSystemPrompt" | "systemPrompt">): string {
+      return [def.customSystemPrompt, def.systemPrompt]
+        .filter((part) => part.trim().length > 0)
+        .join("\n\n");
+    }
+    
+    function parseAgentFile(filePath: string): AgentDef | null {
+      try {
+        const raw = readFileSync(filePath, "utf-8");
+        const match = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+        if (!match) return null;
+    
+        const frontmatter = parseSimpleYamlFrontmatter(match[1]);
+        if (!frontmatter?.name) return null;
+    
+        return {
+          name: frontmatter.name,
+          description: frontmatter.description || "",
+          model: (frontmatter.model || "").trim(),
+          tools: frontmatter.tools || "read,grep,find,ls",
+          systemPrompt: match[2].trim(),
+          customSystemPrompt: (frontmatter["system-prompt"] || "").trim(),
+          systemPromptType: parseSystemPromptType(frontmatter["system-prompt-type"]),
+          file: filePath,
+        };
+      } catch {
+        return null;
+      }
+    }
+    
+    function scanAgentDirs(cwd: string): AgentDef[] {
+      const dirs = [
+        join(cwd, "agents"),
+        join(cwd, ".claude", "agents"),
+        join(cwd, ".pi", "agents"),
+        join(homedir(), ".pi", "agent", "agents"),
+      ];
+    
+      const agents: AgentDef[] = [];
+      const seen = new Set<string>();
+    
+      for (const dir of dirs) {
+        if (!existsSync(dir)) continue;
+        try {
+          for (const file of readdirSync(dir)) {
+            if (!file.endsWith(".md")) continue;
+            const fullPath = resolve(dir, file);
+            const def = parseAgentFile(fullPath);
+            if (def && !seen.has(def.name.toLowerCase())) {
+              seen.add(def.name.toLowerCase());
+              agents.push(def);
+            }
+          }
+        } catch {}
+      }
+    
+      return agents;
+    }
+    
+    function findTeamsPath(cwd: string): string | null {
+      const localTeamsPath = join(cwd, ".pi", "agents", "teams.yaml");
+      if (existsSync(localTeamsPath)) return localTeamsPath;
+    
+      const globalTeamsPath = join(
+        homedir(),
+        ".pi",
+        "agent",
+        "agents",
+        "teams.yaml",
+      );
+      if (existsSync(globalTeamsPath)) return globalTeamsPath;
+    
+      return null;
+    }
+    
+    function formatTeamsSource(cwd: string, teamsPath: string | null): string {
+      if (!teamsPath) return "generated default team";
+      return teamsPath === join(cwd, ".pi", "agents", "teams.yaml")
+        ? ".pi/agents/teams.yaml"
+        : "~/.pi/agent/agents/teams.yaml";
+    }
+    
+    // ── Extension ────────────────────────────────────
+    
+    export default function (pi: ExtensionAPI) {
+      const agentStates: Map<string, AgentState> = new Map();
+      let allAgentDefs: AgentDef[] = [];
+      let teams: Record<string, string[]> = {};
+      let activeTeamName = "";
+      let gridCols = 2;
+      let widgetCtx: any;
+      let sessionDir = "";
+      let contextWindow = 0;
+      let isActive = true;
+      let previousActiveTools: string[] | null = null;
+      let teamsSource = "generated default team";
+      const widgetState: AgentWidgetState = {
+        selectedIndex: 0,
+        expandedAgent: null,
+      };
+    
+      function loadAgents(cwd: string) {
+        // Create session storage dir
+        sessionDir = join(cwd, ".pi", "agent-sessions");
+        if (!existsSync(sessionDir)) {
+          mkdirSync(sessionDir, { recursive: true });
+        }
+    
+        // Load all agent definitions
+        allAgentDefs = scanAgentDirs(cwd);
+    
+        // Load teams from project-local or global config
+        const teamsPath = findTeamsPath(cwd);
+        teamsSource = formatTeamsSource(cwd, teamsPath);
+        if (teamsPath) {
+          try {
+            teams = parseTeamsYaml(readFileSync(teamsPath, "utf-8"));
+          } catch {
+            teams = {};
+          }
+        } else {
+          teams = {};
+        }
+    
+        // If no teams defined, create a default "all" team
+        if (Object.keys(teams).length === 0) {
+          teams = { all: allAgentDefs.map((d) => d.name) };
+        }
+      }
+    
+      function activateTeam(teamName: string) {
+        activeTeamName = teamName;
+        const members = teams[teamName] || [];
+        const defsByName = new Map(
+          allAgentDefs.map((d) => [d.name.toLowerCase(), d]),
+        );
+    
+        agentStates.clear();
+        for (const member of members) {
+          const def = defsByName.get(member.toLowerCase());
+          if (!def) continue;
+          const key = def.name.toLowerCase().replace(/\s+/g, "-");
+          const sessionFile = join(sessionDir, `${key}.json`);
+          agentStates.set(def.name.toLowerCase(), {
+            def,
+            status: "idle",
+            task: "",
+            toolCount: 0,
+            elapsed: 0,
+            lastWork: "",
+            contextPct: 0,
+            sessionFile: existsSync(sessionFile) ? sessionFile : null,
+            runCount: 0,
+          });
+        }
+    
+        // Auto-size grid columns based on team size
+        const size = agentStates.size;
+        gridCols = size <= 3 ? size : size === 4 ? 2 : 3;
+        widgetState.selectedIndex = 0;
+        widgetState.expandedAgent = null;
+      }
+    
+      // ── Grid Rendering ───────────────────────────
+    
+      function clamp(value: number, min: number, max: number): number {
+        return Math.max(min, Math.min(max, value));
+      }
+    
+      function truncateLine(text: string, width: number): string {
+        if (width <= 0) return "";
+        if (text.length <= width) return text;
+        if (width <= 3) return ".".repeat(width);
+        return text.slice(0, width - 3) + "...";
+      }
+    
+      function wrapText(text: string, width: number, maxLines: number): string[] {
+        if (width <= 0 || maxLines <= 0) return [];
+    
+        const words = text.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+        if (words.length === 0) return [""];
+    
+        const lines: string[] = [];
+        let current = "";
+    
+        for (const word of words) {
+          if (!current) {
+            current = word.length > width ? truncateLine(word, width) : word;
+            continue;
+          }
+    
+          if (`${current} ${word}`.length <= width) {
+            current += ` ${word}`;
+            continue;
+          }
+    
+          lines.push(current);
+          if (lines.length === maxLines) {
+            return lines;
+          }
+          current = word.length > width ? truncateLine(word, width) : word;
+        }
+    
+        if (lines.length < maxLines && current) {
+          lines.push(current);
+        }
+    
+        if (lines.length > maxLines) {
+          return lines.slice(0, maxLines);
+        }
+    
+        return lines;
+      }
+    
+      function getStatusColor(status: AgentState["status"]): string {
+        return status === "idle"
+          ? "dim"
+          : status === "running"
+            ? "accent"
+            : status === "done"
+              ? "success"
+              : status === "disabled"
+                ? "muted"
+                : "error";
+      }
+    
+      function getStatusIcon(status: AgentState["status"]): string {
+        return status === "idle"
+          ? "○"
+          : status === "running"
+            ? "●"
+            : status === "done"
+              ? "✓"
+              : status === "disabled"
+                ? "⏸"
+                : "✗";
+      }
+    
+      function getContextBar(state: AgentState): string {
+        const filled = clamp(Math.ceil(state.contextPct / 20), 0, 5);
+        const bar = "#".repeat(filled) + "-".repeat(5 - filled);
+        return `[${bar}] ${Math.ceil(state.contextPct)}%`;
+      }
+    
+      function getAgentDetailLines(state: AgentState, contentWidth: number): string[] {
+        const description = truncateLine(state.def.description || "No description", contentWidth);
+        const task = truncateLine(state.task || "Waiting for work", contentWidth);
+        const currentWork = truncateLine(
+          state.status === "running"
+            ? state.lastWork || state.task || "Working..."
+            : state.lastWork || "No recent output",
+          contentWidth,
+        );
+        const model = truncateLine(`Model: ${state.def.model || "session default"}`, contentWidth);
+        const tools = truncateLine(`Tools: ${state.def.tools}`, contentWidth);
+        const runs = truncateLine(
+          `Runs: ${state.runCount} · Session: ${state.sessionFile ? "resume" : "new"}`,
+          contentWidth,
+        );
+    
+        const detailLines = [
+          `Role: ${description}`,
+          `Task: ${task}`,
+          `Doing: ${currentWork}`,
+          model,
+          tools,
+          runs,
+        ];
+    
+        if (state.def.customSystemPrompt) {
+          detailLines.push("Custom system prompt configured ✓");
+        }
+    
+        return detailLines.flatMap((line) => wrapText(line, contentWidth, 2));
+      }
+    
+      // ---- TODOs integration ----
+      // Reference: extensions/todos logic, prefer fast sync reads directly.
+      const { readdirSync, readFileSync, existsSync } = require("fs");
+      const path = require("path");
+      const os = require("os");
+      function getTodosDir(cwd: string): string {
+        const overridePath = process.env["PI_TODO_PATH"];
+        if (overridePath && overridePath.trim()) {
+          return path.resolve(cwd, overridePath.trim());
+        }
+        return path.join(os.homedir(), ".pi", "history", path.basename(cwd), "todos");
+      }
+      // Parses JSON front matter from todos
+      function parseTodoFrontMatter(text: string, id: string) {
+        const empty = { id, title: "", tags: [], status: "open", created_at: "", assigned_to_session: undefined };
+        const obj = text.trim();
+        if (!obj.startsWith("{")) return empty;
+        try {
+          const endIdx = text.indexOf("}") + 1;
+          if (endIdx <= 0) return empty;
+          return { ...empty, ...JSON.parse(text.slice(0, endIdx)) };
+        } catch {
+          return empty;
+        }
+      }
+      // Strike/dim logic and status normalization (matches ref_todo)
+      const TODO_STATUS_ICON: Record<string, string> = { completed: "✓", "in-progress": "◉", "not-started": "○" };
+      function normalizeTodoStatus(raw: string): "completed" | "in-progress" | "not-started" {
+        const s = raw.toLowerCase();
+        if (["completed", "done", "closed"].includes(s)) return "completed";
+        if (["in-progress", "inprogress", "progress", "active"].includes(s)) return "in-progress";
+        return "not-started";
+      }
+      // Per-agent session mapping: agent session resume file ~= assignment
+      function agentSessionName(agentDef: AgentDef): string {
+        // See how agent sessionFile is derived (".pi/agent-sessions/<slug>.json")
+        return `${agentDef.name.toLowerCase().replace(/\s+/g, "-")}.json`;
+      }
+      // Return todos for a given agent (or fallback to unassigned/project-wide)
+      function findAgentTodos(agentDef: AgentDef, cwd: string) {
+        const dir = getTodosDir(cwd);
+        let list: any[] = [];
+        try {
+          list = readdirSync(dir).filter((f: string) => f.endsWith(".md"));
+        } catch { return []; }
+        // prefer assignment to session file, fallback to unassigned
+        const sessionId = agentSessionName(agentDef);
+        const todos = list.map((f: string) => {
+          try {
+            const content = readFileSync(path.join(dir, f), "utf8");
+            const fm = parseTodoFrontMatter(content, f.replace(/\.md$/, ""));
+            return fm;
+          } catch { return null; }
+        }).filter(Boolean);
+        const mine = todos.filter(t => t.assigned_to_session === sessionId);
+        if (mine.length > 0) return mine;
+        // fallback to all open/unassigned todos
+        return todos.filter((t) => !t.assigned_to_session && !["closed", "done", "completed"].includes((t.status||"").toLowerCase()));
+      }
+      // Stats for a todo list
+      function todoStats(todos: any[]): { completed: number, total: number } {
+        const total = todos.length;
+        const completed = todos.filter(t => normalizeTodoStatus(t.status) === "completed").length;
+        return { completed, total };
+      }
+      // Returns sorted [last done, current (in-progress), next (not-started)] for context snippet
+      function contextualTodos(todos: any[]): any[] {
+        // Most recent completed, 1 in-progress, 1 next (by created_at if present)
+        const completed = todos
+          .filter(t => normalizeTodoStatus(t.status) === "completed")
+          .sort((a, b) => (b.created_at||"").localeCompare(a.created_at||""));
+        const inProgress = todos.find(t => normalizeTodoStatus(t.status) === "in-progress");
+        const notStarted = todos.filter(t => normalizeTodoStatus(t.status) === "not-started")
+          .sort((a, b) => (a.created_at||"").localeCompare(b.created_at||""));
+        const entries = [];
+        if (completed.length > 0) entries.push(completed[0]);
+        if (inProgress) entries.push(inProgress);
+        if (notStarted.length > 0) entries.push(notStarted[0]);
+        return entries;
+      }
+      // Rendering line for one todo
+      function renderAgentTodo(theme: any, todo: any, width: number) {
+        const icon = TODO_STATUS_ICON[normalizeTodoStatus(todo.status)] || "⏳";
+        let title = (todo.title || "(untitled)").slice(0, width-6);
+        if (normalizeTodoStatus(todo.status) === "completed") {
+          title = theme.fg("dim", theme.strikethrough ? theme.strikethrough(title) : title);
+        } else if (normalizeTodoStatus(todo.status) === "in-progress") {
+          title = theme.fg("warning", title);
+        }
+        return `${icon} ${title}`;
+      }
+    
+      // Patch existing renderCard to add todos UI around summary and below
+      function renderCard(
+        state: AgentState,
+        colWidth: number,
+        theme: any,
+        options: { expanded: boolean; selected: boolean },
+      ): string[] {
+        const w = Math.max(8, colWidth - 2);
+        const statusColor = getStatusColor(state.status);
+        const statusIcon = getStatusIcon(state.status);
+    
+        const topBorderColor = options.selected || options.expanded ? "accent" : "dim";
+        const sideBorderColor = options.selected || options.expanded ? "accent" : "dim";
+    
+        const top = "┌" + "─".repeat(w) + "┐";
+        const bot = "└" + "─".repeat(w) + "┘";
+        const border = (content: string, visibleLength: number) =>
+          theme.fg(sideBorderColor, "│") +
+          content +
+          " ".repeat(Math.max(0, w - visibleLength)) +
+          theme.fg(sideBorderColor, "│");
+    
+        const lines = [theme.fg(topBorderColor, top)];
+    
+        const namePrefix = options.expanded ? "▼ " : options.selected ? "▸ " : "  ";
+        const modelSuffix = state.def.model ? ` [${state.def.model}]` : "";
+        const nameText = truncateLine(namePrefix + displayName(state.def.name) + modelSuffix, w - 1);
+        lines.push(
+          border(
+            " " + theme.fg("accent", theme.bold(nameText)),
+            1 + nameText.length,
+          ),
+        );
+    
+        // ---- TODO Status headline ----
+        const todos = findAgentTodos(state.def, widgetCtx?.cwd||process.cwd());
+        const tstats = todoStats(todos);
+        let todoHeadline = tstats.total === 0
+          ? theme.fg("dim", "no todos")
+          : theme.fg("accent", `${tstats.completed} of ${tstats.total} todos done`);
+        lines.push(border(" " + todoHeadline, 1 + todoHeadline.length));
+    
+        const statusStr = `${statusIcon} ${state.status}${state.status !== "idle" ? ` ${Math.round(state.elapsed / 1000)}s` : ""}`;
+        const statusText = truncateLine(statusStr, w - 1);
+        lines.push(border(" " + theme.fg(statusColor, statusText), 1 + statusText.length));
+    
+        const ctxStr = getContextBar(state);
+        lines.push(border(" " + theme.fg("dim", ctxStr), 1 + ctxStr.length));
+    
+        const summaryLabel = state.status === "running" ? "Doing" : "Summary";
+        const summaryRaw = state.status === "running"
+          ? state.lastWork || state.task || "Working..."
+          : state.task
+            ? state.lastWork || state.task
+            : state.def.description;
+        const summaryLine = truncateLine(`${summaryLabel}: ${summaryRaw}`, w - 1);
+        lines.push(border(" " + theme.fg("muted", summaryLine), 1 + summaryLine.length));
+    
+        // ---- Contextual todos snippet ----
+        if (tstats.total > 0) {
+          lines.push(border(theme.fg("dim", "─".repeat(Math.max(2,w-2))), w));
+          const shown = contextualTodos(todos);
+          for (const todo of shown) {
+            const tline = renderAgentTodo(theme, todo, w-3);
+            lines.push(border("   " + tline, 3 + tline.length));
+          }
+        }
+    
+        if (options.expanded) {
+          for (const detail of getAgentDetailLines(state, w - 1)) {
+            lines.push(border(" " + theme.fg("muted", detail), 1 + detail.length));
+          }
+        } else if (state.def.customSystemPrompt) {
+          const promptText = truncateLine("Custom system prompt ✓", w - 1);
+          lines.push(border(" " + theme.fg("success", promptText), 1 + promptText.length));
+        }
+    
+        lines.push(theme.fg(topBorderColor, bot));
+        return lines;
+      }
+    
+      function handleWidgetNavigationInput(keyData: string): boolean {
+        const agents = Array.from(agentStates.values());
+        if (agents.length === 0) return false;
+    
+        // --- Expand/Collapse ---
+        // Only allow Ctrl+Space (and Cmd+Space if available) to expand/collapse
+        // Enter/Space/q/Backspace/Left (bare) are removed. Cmd detected if available.
+        const isCtrlOrCmd = (k: string) => matchesKey(keyData, Key.ctrl(k)) || (Key.cmd && matchesKey(keyData, Key.cmd(k)));
+        if (isCtrlOrCmd("space")) {
+          if (widgetState.expandedAgent) {
+            widgetState.expandedAgent = null;
+          } else {
+            const selectedAgent = agents[widgetState.selectedIndex];
+            if (selectedAgent) {
+              widgetState.expandedAgent = selectedAgent.def.name;
+            }
+          }
+          return true;
+        }
+    
+        // --- Collapse (when expanded) ---
+        // Only Esc collapses expanded view
+        if (widgetState.expandedAgent) {
+          if (matchesKey(keyData, Key.esc)) {
+            widgetState.expandedAgent = null;
+            return true;
+          }
+          return false;
+        }
+    
+        // --- Navigation: ONLY Ctrl+Arrow/Ctrl+hjkl, optionally Cmd if supported ---
+        const cols = Math.min(gridCols, agents.length);
+        const previousIndex = widgetState.selectedIndex;
+        const moveUp = isCtrlOrCmd("up") || isCtrlOrCmd("k");
+        const moveDown = isCtrlOrCmd("down") || isCtrlOrCmd("j");
+        const moveLeft = isCtrlOrCmd("left") || isCtrlOrCmd("h");
+        const moveRight = isCtrlOrCmd("right") || isCtrlOrCmd("l");
+    
+        if (moveUp) {
+          widgetState.selectedIndex = clamp(widgetState.selectedIndex - cols, 0, agents.length - 1);
+        } else if (moveDown) {
+          widgetState.selectedIndex = clamp(widgetState.selectedIndex + cols, 0, agents.length - 1);
+        } else if (moveLeft) {
+          widgetState.selectedIndex = clamp(widgetState.selectedIndex - 1, 0, agents.length - 1);
+        } else if (moveRight) {
+          widgetState.selectedIndex = clamp(widgetState.selectedIndex + 1, 0, agents.length - 1);
+        } else {
+          return false;
+        }
+        return widgetState.selectedIndex !== previousIndex;
+      }
+    
+      function clearWidgetAndFooter(ctx = widgetCtx) {
+        if (!ctx) return;
+        ctx.ui.setWidget("agent-team", undefined);
+        ctx.ui.setFooter(undefined);
+      }
+    
+      function setFooter(ctx = widgetCtx) {
+        if (!ctx) return;
+        ctx.ui.setFooter((_tui, theme, _footerData) => ({
+          dispose: () => {},
+          invalidate() {},
+          render(width: number): string[] {
+            if (!isActive) {
+              return [truncateToWidth("", width)];
+            }
+    
+            const model = ctx.model?.id || "no-model";
+            const usage = ctx.getContextUsage();
+            const pct = usage ? usage.percent : 0;
+            const filled = Math.round(pct / 10);
+            const bar = "#".repeat(filled) + "-".repeat(10 - filled);
+    
+            const left =
+              theme.fg("dim", ` ${model}`) +
+              theme.fg("muted", " · ") +
+              theme.fg("accent", activeTeamName);
+            const right = theme.fg("dim", `[${bar}] ${Math.round(pct)}% `);
+            const pad = " ".repeat(
+              Math.max(1, width - visibleWidth(left) - visibleWidth(right)),
+            );
+    
+            return [truncateToWidth(left + pad + right, width)];
+          },
+        }));
+      }
+    
+      function updateStatus(ctx = widgetCtx) {
+        if (!ctx) return;
+        ctx.ui.setStatus(
+          "agent-team",
+          isActive
+            ? `Team: ${activeTeamName} (${agentStates.size})`
+            : "Team: disabled",
+        );
+      }
+    
+      function updateWidget() {
+        if (!widgetCtx || !isActive) return;
+    
+        widgetCtx.ui.setWidget("agent-team", (_tui: any, theme: any) => {
+          const text = new Text("", 0, 1);
+    
+          return {
+            render(width: number): string[] {
+              if (agentStates.size === 0) {
+                text.setText(
+                  theme.fg(
+                    "dim",
+                    "No agents found. Add .md files to agents/, .pi/agents/, or ~/.pi/agent/agents/",
+                  ),
+                );
+                return text.render(width);
+              }
+    
+              const allAgents = Array.from(agentStates.values());
+              if (widgetState.selectedIndex >= allAgents.length) {
+                widgetState.selectedIndex = Math.max(0, allAgents.length - 1);
+              }
+    
+              const agents = widgetState.expandedAgent
+                ? allAgents.filter((agent) => agent.def.name === widgetState.expandedAgent)
+                : allAgents;
+    
+              const cols = widgetState.expandedAgent ? 1 : Math.min(gridCols, agents.length);
+              const gap = 1;
+              const colWidth = Math.floor((width - gap * (cols - 1)) / cols);
+              const rows: string[][] = [];
+    
+              for (let i = 0; i < agents.length; i += cols) {
+                const rowAgents = agents.slice(i, i + cols);
+                const cards = rowAgents.map((agent) => {
+                  const selectedAgent = allAgents[widgetState.selectedIndex];
+                  return renderCard(agent, colWidth, theme, {
+                    expanded: widgetState.expandedAgent === agent.def.name,
+                    selected: !widgetState.expandedAgent && selectedAgent?.def.name === agent.def.name,
+                  });
+                });
+    
+                const cardHeight = Math.max(...cards.map((card) => card.length));
+    
+                while (cards.length < cols) {
+                  cards.push(Array(cardHeight).fill(" ".repeat(colWidth)));
+                }
+                for (let line = 0; line < cardHeight; line++) {
+                  rows.push(cards.map((card) => card[line] || ""));
+                }
+              }
+    
+              // On-screen help text
+              let controls: string;
+              if (widgetState.expandedAgent) {
+                controls = theme.fg(
+                  "dim",
+                  "Ctrl+Space to collapse · Esc also close"
+                );
+              } else {
+                controls = theme.fg(
+                  "dim",
+                  "Ctrl+Arrow/Ctrl+h/j/k/l to navigate · Ctrl+Space to expand"
+                );
+              }
+              const output = rows.map((columns) => columns.join(" ".repeat(gap)));
+              text.setText(output.concat(["", controls]).join("\n"));
+              return text.render(width);
+            },
+            invalidate() {
+              text.invalidate();
+            },
+            handleInput(keyData: string) {
+              const handled = handleWidgetNavigationInput(keyData);
+              if (handled) {
+                text.invalidate();
+                updateWidget();
+              }
+            },
+          };
+        });
+      }
+    
+      function enableAgentTeam(ctx = widgetCtx) {
+        if (!ctx) return;
+    
+        widgetCtx = ctx;
+        isActive = true;
+        loadAgents(ctx.cwd);
+    
+        const teamNames = Object.keys(teams);
+        if (teamNames.length > 0) {
+          activateTeam(teams[activeTeamName] ? activeTeamName : teamNames[0]);
+        } else {
+          activeTeamName = "";
+          agentStates.clear();
+        }
+    
+        pi.setActiveTools(["dispatch_agent"]);
+        updateStatus(ctx);
+        updateWidget();
+        setFooter(ctx);
+      }
+    
+      // ── Dispatch Agent (returns Promise) ─────────
+    
+      function dispatchAgent(
+        agentName: string,
+        task: string,
+        ctx: any,
+      ): Promise<{ output: string; exitCode: number; elapsed: number }> {
+        if (!isActive) {
+          return Promise.resolve({
+            output:
+              "Agent team is deactivated. dispatch_agent is unavailable for this session.",
+            exitCode: 1,
+            elapsed: 0,
+          });
+        }
+    
+        const key = agentName.toLowerCase();
+        const state = agentStates.get(key);
+        if (!state) {
+          return Promise.resolve({
+            output: `Agent "${agentName}" not found. Available: ${Array.from(
+              agentStates.values(),
+            )
+              .map((s) => displayName(s.def.name))
+              .join(", ")}`,
+            exitCode: 1,
+            elapsed: 0,
+          });
+        }
+    
+        if (state.status === "running") {
+          return Promise.resolve({
+            output: `Agent "${displayName(state.def.name)}" is already running. Wait for it to finish.`,
+            exitCode: 1,
+            elapsed: 0,
+          });
+        }
+    
+        state.status = "running";
+        state.task = task;
+        state.toolCount = 0;
+        state.elapsed = 0;
+        state.lastWork = "";
+        state.runCount++;
+        updateWidget();
+    
+        const startTime = Date.now();
+        state.timer = setInterval(() => {
+          state.elapsed = Date.now() - startTime;
+          updateWidget();
+        }, 1000);
+    
+        const model = state.def.model || (ctx.model
+          ? `${ctx.model.provider}/${ctx.model.id}`
+          : "openrouter/google/gemini-3-flash-preview");
+    
+        // Session file for this agent
+        const agentKey = state.def.name.toLowerCase().replace(/\s+/g, "-");
+        const agentSessionFile = join(sessionDir, `${agentKey}.json`);
+    
+        // Build args — first run creates session, subsequent runs resume
+        const agentSystemPrompt = buildAgentSystemPrompt(state.def);
+    
+        const args = [
+          "--mode",
+          "json",
+          "-p",
+          "--no-extensions",
+          "--model",
+          model,
+          "--tools",
+          state.def.tools,
+          "--thinking",
+          "off",
+          state.def.systemPromptType === "append"
+            ? "--append-system-prompt"
+            : "--system-prompt",
+          agentSystemPrompt,
+          "--session",
+          agentSessionFile,
+        ];
+    
+        // Continue existing session if we have one
+        if (state.sessionFile) {
+          args.push("-c");
+        }
+    
+        args.push(task);
+    
+        const textChunks: string[] = [];
+    
+        return new Promise((resolve) => {
+          const proc = spawn("pi", args, {
+            stdio: ["ignore", "pipe", "pipe"],
+            env: { ...process.env },
+          });
+    
+          let buffer = "";
+    
+          proc.stdout!.setEncoding("utf-8");
+          proc.stdout!.on("data", (chunk: string) => {
+            buffer += chunk;
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+            for (const line of lines) {
+              if (!line.trim()) continue;
+              try {
+                const event = JSON.parse(line);
+                if (event.type === "message_update") {
+                  const delta = event.assistantMessageEvent;
+                  if (delta?.type === "text_delta") {
+                    textChunks.push(delta.delta || "");
+                    const full = textChunks.join("");
+                    const last =
+                      full
+                        .split("\n")
+                        .filter((l: string) => l.trim())
+                        .pop() || "";
+                    state.lastWork = last;
+                    updateWidget();
+                  }
+                } else if (event.type === "tool_execution_start") {
+                  state.toolCount++;
+                  updateWidget();
+                } else if (event.type === "message_end") {
+                  const msg = event.message;
+                  if (msg?.usage && contextWindow > 0) {
+                    state.contextPct =
+                      ((msg.usage.input || 0) / contextWindow) * 100;
+                    updateWidget();
+                  }
+                } else if (event.type === "agent_end") {
+                  const msgs = event.messages || [];
+                  const last = [...msgs]
+                    .reverse()
+                    .find((m: any) => m.role === "assistant");
+                  if (last?.usage && contextWindow > 0) {
+                    state.contextPct =
+                      ((last.usage.input || 0) / contextWindow) * 100;
+                    updateWidget();
+                  }
+                }
+              } catch {}
+            }
+          });
+    
+          proc.stderr!.setEncoding("utf-8");
+          proc.stderr!.on("data", () => {});
+    
+          proc.on("close", (code) => {
+            if (buffer.trim()) {
+              try {
+                const event = JSON.parse(buffer);
+                if (event.type === "message_update") {
+                  const delta = event.assistantMessageEvent;
+                  if (delta?.type === "text_delta")
+                    textChunks.push(delta.delta || "");
+                }
+              } catch {}
+            }
+    
+            clearInterval(state.timer);
+            state.elapsed = Date.now() - startTime;
+            state.status = isActive ? (code === 0 ? "done" : "error") : "disabled";
+    
+            // Mark session file as available for resume
+            if (code === 0) {
+              state.sessionFile = agentSessionFile;
+            }
+    
+            const full = textChunks.join("");
+            state.lastWork =
+              full
+                .split("\n")
+                .filter((l: string) => l.trim())
+                .pop() || "";
+            updateWidget();
+            if (!isActive) {
+              clearWidgetAndFooter(ctx);
+              updateStatus(ctx);
+            }
+    
+            ctx.ui.notify(
+              `${displayName(state.def.name)} ${state.status} in ${Math.round(state.elapsed / 1000)}s`,
+              state.status === "done" ? "success" : "error",
+            );
+    
+            resolve({
+              output: full,
+              exitCode: code ?? 1,
+              elapsed: state.elapsed,
+            });
+          });
+    
+          proc.on("error", (err) => {
+            clearInterval(state.timer);
+            state.status = isActive ? "error" : "disabled";
+            state.lastWork = `Error: ${err.message}`;
+            updateWidget();
+            if (!isActive) {
+              clearWidgetAndFooter(ctx);
+              updateStatus(ctx);
+            }
+            resolve({
+              output: `Error spawning agent: ${err.message}`,
+              exitCode: 1,
+              elapsed: Date.now() - startTime,
+            });
+          });
+        });
+      }
+    
+      // ── dispatch_agent Tool (registered at top level) ──
+    
+      pi.registerTool({
+        name: "dispatch_agent",
+        label: "Dispatch Agent",
+        description:
+          "Dispatch a task to a specialist agent. The agent will execute the task and return the result. Use the system prompt to see available agent names.",
+        parameters: Type.Object({
+          agent: Type.String({ description: "Agent name (case-insensitive)" }),
+          task: Type.String({
+            description: "Task description for the agent to execute",
+          }),
+        }),
+    
+        async execute(_toolCallId, params, _signal, onUpdate, ctx) {
+          const { agent, task } = params as { agent: string; task: string };
+    
+          try {
+            if (!isActive) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Agent team is deactivated. dispatch_agent is unavailable for this session.",
+                  },
+                ],
+                details: {
+                  agent,
+                  task,
+                  status: "error",
+                  elapsed: 0,
+                  exitCode: 1,
+                  fullOutput: "",
+                },
+              };
+            }
+    
+            if (onUpdate) {
+              onUpdate({
+                content: [{ type: "text", text: `Dispatching to ${agent}...` }],
+                details: { agent, task, status: "dispatching" },
+              });
+            }
+    
+            const result = await dispatchAgent(agent, task, ctx);
+    
+            const truncated =
+              result.output.length > 8000
+                ? result.output.slice(0, 8000) + "\n\n... [truncated]"
+                : result.output;
+    
+            const status = result.exitCode === 0 ? "done" : "error";
+            const summary = `[${agent}] ${status} in ${Math.round(result.elapsed / 1000)}s`;
+    
+            return {
+              content: [{ type: "text", text: `${summary}\n\n${truncated}` }],
+              details: {
+                agent,
+                task,
+                status,
+                elapsed: result.elapsed,
+                exitCode: result.exitCode,
+                fullOutput: result.output,
+              },
+            };
+          } catch (err: any) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Error dispatching to ${agent}: ${err?.message || err}`,
+                },
+              ],
+              details: {
+                agent,
+                task,
+                status: "error",
+                elapsed: 0,
+                exitCode: 1,
+                fullOutput: "",
+              },
+            };
+          }
+        },
+    
+        renderCall(args, theme) {
+          const agentName = (args as any).agent || "?";
+          const task = (args as any).task || "";
+          const preview = task.length > 60 ? task.slice(0, 57) + "..." : task;
+          return new Text(
+            theme.fg("toolTitle", theme.bold("dispatch_agent ")) +
+              theme.fg("accent", agentName) +
+              theme.fg("dim", " — ") +
+              theme.fg("muted", preview),
+            0,
+            0,
+          );
+        },
+    
+        renderResult(result, options, theme) {
+          const details = result.details as any;
+          if (!details) {
+            const text = result.content[0];
+            return new Text(text?.type === "text" ? text.text : "", 0, 0);
+          }
+    
+          // Streaming/partial result while agent is still running
+          if (options.isPartial || details.status === "dispatching") {
+            return new Text(
+              theme.fg("accent", `● ${details.agent || "?"}`) +
+                theme.fg("dim", " working..."),
+              0,
+              0,
+            );
+          }
+    
+          const icon = details.status === "done" ? "✓" : "✗";
+          const color = details.status === "done" ? "success" : "error";
+          const elapsed =
+            typeof details.elapsed === "number"
+              ? Math.round(details.elapsed / 1000)
+              : 0;
+          const header =
+            theme.fg(color, `${icon} ${details.agent}`) +
+            theme.fg("dim", ` ${elapsed}s`);
+    
+          if (options.expanded && details.fullOutput) {
+            const output =
+              details.fullOutput.length > 4000
+                ? details.fullOutput.slice(0, 4000) + "\n... [truncated]"
+                : details.fullOutput;
+            return new Text(header + "\n" + theme.fg("muted", output), 0, 0);
+          }
+    
+          return new Text(header, 0, 0);
+        },
+      });
+    
+      // ── Commands ─────────────────────────────────
+    
+      pi.registerCommand("agents-team", {
+        description: "Select a team to work with",
+        handler: async (_args, ctx) => {
+          widgetCtx = ctx;
+          if (!isActive) {
+            return "Agent team is deactivated for this session.";
+          }
+          const teamNames = Object.keys(teams);
+          if (teamNames.length === 0) {
+            ctx.ui.notify(
+              "No teams defined in .pi/agents/teams.yaml or ~/.pi/agent/agents/teams.yaml",
+              "warning",
+            );
+            return;
+          }
+    
+          const options = teamNames.map((name) => {
+            const members = teams[name].map((m) => displayName(m));
+            return `${name} — ${members.join(", ")}`;
+          });
+    
+          const choice = await ctx.ui.select("Select Team", options);
+          if (choice === undefined) return;
+    
+          const idx = options.indexOf(choice);
+          const name = teamNames[idx];
+          activateTeam(name);
+          updateWidget();
+          updateStatus(ctx);
+          ctx.ui.notify(
+            `Team: ${name} — ${Array.from(agentStates.values())
+              .map((s) => displayName(s.def.name))
+              .join(", ")}`,
+            "info",
+          );
+        },
+      });
+    
+      pi.registerCommand("agents-list", {
+        description: "List all loaded agents",
+        handler: async (_args, _ctx) => {
+          widgetCtx = _ctx;
+          if (!isActive) {
+            return "Agent team is deactivated for this session.";
+          }
+          const names = Array.from(agentStates.values())
+            .map((s) => {
+              const session = s.sessionFile ? "resumed" : "new";
+              return `${displayName(s.def.name)} (${s.status}, ${session}, runs: ${s.runCount}): ${s.def.description}`;
+            })
+            .join("\n");
+          _ctx.ui.notify(names || "No agents loaded", "info");
+        },
+      });
+    
+      pi.registerCommand("agents-grid", {
+        description: "Set grid columns: /agents-grid <1-6>",
+        getArgumentCompletions: (prefix: string): AutocompleteItem[] | null => {
+          const items = ["1", "2", "3", "4", "5", "6"].map((n) => ({
+            value: n,
+            label: `${n} columns`,
+          }));
+          const filtered = items.filter((i) => i.value.startsWith(prefix));
+          return filtered.length > 0 ? filtered : items;
+        },
+        handler: async (args, _ctx) => {
+          widgetCtx = _ctx;
+          if (!isActive) {
+            return "Agent team is deactivated for this session.";
+          }
+          const n = parseInt(args?.trim() || "", 10);
+          if (n >= 1 && n <= 6) {
+            gridCols = n;
+            _ctx.ui.notify(`Grid set to ${gridCols} columns`, "info");
+            updateWidget();
+          } else {
+            _ctx.ui.notify("Usage: /agents-grid <1-6>", "error");
+          }
+        },
+      });
+    
+    
+      pi.registerCommand("agents-team:deactivate", {
+        description: "Deactivate agent-team for the current session",
+        handler: async (_args, ctx) => {
+          widgetCtx = ctx;
+          isActive = false;
+    
+          for (const state of agentStates.values()) {
+            if (state.timer) {
+              clearInterval(state.timer);
+              state.timer = undefined;
+            }
+            state.status = "disabled";
+          }
+    
+          const restoredTools =
+            previousActiveTools && previousActiveTools.length > 0
+              ? previousActiveTools
+              : pi.getAllTools().map((t) => t.name);
+          pi.setActiveTools(restoredTools);
+    
+          clearWidgetAndFooter(ctx);
+          updateStatus(ctx);
+          ctx.ui.notify("Agent team deactivated for this session", "info");
+          return "Agent team deactivated for this session.";
+        },
+      });
+    
+      pi.registerCommand("agents-team:activate", {
+        description: "Activate agent-team for the current session",
+        handler: async (_args, ctx) => {
+          widgetCtx = ctx;
+          if (isActive) {
+            return "Agent team is already active for this session.";
+          }
+    
+          enableAgentTeam(ctx);
+    
+          const members = Array.from(agentStates.values())
+            .map((s) => displayName(s.def.name))
+            .join(", ");
+          ctx.ui.notify(
+            `Agent team activated for this session\n` +
+              `Team: ${activeTeamName} (${members})\n` +
+              `Team sets loaded from: ${teamsSource}`,
+            "info",
+          );
+          return "Agent team activated for this session.";
+        },
+      });
+    
+      // ── System Prompt Override ───────────────────
+    
+      pi.on("before_agent_start", async (_event, _ctx) => {
+        if (!isActive) return;
+    
+        // Build dynamic agent catalog from active team only
+        const agentCatalog = Array.from(agentStates.values())
+          .map(
+            (s) =>
+              `### ${displayName(s.def.name)}\n**Dispatch as:** \`${s.def.name}\`\n${s.def.description}\n**Tools:** ${s.def.tools}`,
+          )
+          .join("\n\n");
+    
+        const teamMembers = Array.from(agentStates.values())
+          .map((s) => displayName(s.def.name))
+          .join(", ");
+    
+        return {
+          systemPrompt: `You are a dispatcher agent. You coordinate specialist agents to accomplish tasks.
+    You do NOT have direct access to the codebase. You MUST delegate all work through
+    agents using the dispatch_agent tool.
+    
+    ## Active Team: ${activeTeamName}
+    Members: ${teamMembers}
+    You can ONLY dispatch to agents listed below. Do not attempt to dispatch to agents outside this team.
+    
+    ## How to Work
+    - Analyze the user's request and break it into clear sub-tasks
+    - Choose the right agent(s) for each sub-task
+    - Dispatch tasks using the dispatch_agent tool
+    - Review results and dispatch follow-up agents if needed
+    - If a task fails, try a different agent or adjust the task description
+    - Summarize the outcome for the user
+    
+    ## Rules
+    - NEVER try to read, write, or execute code directly — you have no such tools
+    - ALWAYS use dispatch_agent to get work done
+    - You can chain agents: use scout to explore, then builder to implement
+    - You can dispatch the same agent multiple times with different tasks
+    - Keep tasks focused — one clear objective per dispatch
+    
+    ## Agents
+    
+    ${agentCatalog}`,
+        };
+      });
+    
+      // ── Session Start ────────────────────────────
+    
+      pi.on("session_start", async (_event, _ctx) => {
+        // Clear widgets from previous session
+        if (widgetCtx) {
+          widgetCtx.ui.setWidget("agent-team", undefined);
+        }
+        widgetCtx = _ctx;
+        contextWindow = _ctx.model?.contextWindow || 0;
+        isActive = true;
+    
+        // Wipe old agent session files so subagents start fresh
+        const sessDir = join(_ctx.cwd, ".pi", "agent-sessions");
+        if (existsSync(sessDir)) {
+          for (const f of readdirSync(sessDir)) {
+            if (f.endsWith(".json")) {
+              try {
+                unlinkSync(join(sessDir, f));
+              } catch {}
+            }
+          }
+        }
+    
+        previousActiveTools = pi.getActiveTools();
+        enableAgentTeam(_ctx);
+    
+        const members = Array.from(agentStates.values())
+          .map((s) => displayName(s.def.name))
+          .join(", ");
+        _ctx.ui.notify(
+          `Team: ${activeTeamName} (${members})\n` +
+            `Team sets loaded from: ${teamsSource}\n\n` +
+            `/agents-team          Select a team\n` +
+            `/agents-team:activate Activate agent-team for this session\n` +
+            `/agents-team:deactivate Disable agent-team for this session\n` +
+            `/agents-list          List active agents and status\n` +
+            `/agents-grid <1-6>    Set grid column count`,
+          "info",
+        );
+        updateWidget();
+      });
+    }
+    
+  operator: 'match'
+  stack: |-
+    TestContext.<anonymous> (/home/jakobwgnr/projects/pi-config/extensions/agent-team/index.test.js:165:10)
+    Test.runInAsyncScope (node:async_hooks:211:14)
+    Test.run (node:internal/test_runner/test:979:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:677:18)
+    Test.postRun (node:internal/test_runner/test:1090:19)
+    Test.run (node:internal/test_runner/test:1018:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:677:7)
+  ...
+# Subtest: agent-team no longer registers a focus command or focus overlay UI
+ok 13 - agent-team no longer registers a focus command or focus overlay UI
+  ---
+  duration_ms: 0.181086
+  ...
+# Subtest: agent-team widget instructions mention modifier-gated navigation keys and Ctrl+Space, and no bare key instructions
+not ok 14 - agent-team widget instructions mention modifier-gated navigation keys and Ctrl+Space, and no bare key instructions
+  ---
+  duration_ms: 1.370609
+  location: '/home/jakobwgnr/projects/pi-config/extensions/agent-team/index.test.js:187:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input was expected to not match the regular expression /Enter/. Input:
+    
+    '/**\n' +
+      ' * Agent Team — Dispatcher-only orchestrator with grid dashboard\n' +
+      ' *\n' +
+      ' * The primary Pi agent has NO codebase tools. It can ONLY delegate work\n' +
+      ' * to specialist agents via the `dispatch_agent` tool. Each specialist\n' +
+      ' * maintains its own Pi session for cross-invocation memory.\n' +
+      ' *\n' +
+      ' * Loads agent definitions from agents/*.md, .claude/agents/*.md, .pi/agents/*.md,\n' +
+      ' * and ~/.pi/agent/agents/*.md.\n' +
+      ' * Teams are defined in .pi/agents/teams.yaml — on boot a select dialog lets\n' +
+      ' * you pick which team to work with. Only team members are available for dispatch.\n' +
+      ' *\n' +
+      ' * Commands:\n' +
+      ' *   /agents-team          — switch active team\n' +
+      ' *   /agents-list          — list loaded agents\n' +
+      ' *   /agents-grid N        — set column count (default 2)\n' +
+      ' *\n' +
+      ' * Usage: pi -e extensions/agent-team.ts\n' +
+      ' */\n' +
+      '\n' +
+      'import { type ExtensionAPI } from "@mariozechner/pi-coding-agent";\n' +
+      'import {\n' +
+      '  Key,\n' +
+      '  Text,\n' +
+      '  matchesKey,\n' +
+      '  truncateToWidth,\n' +
+      '  visibleWidth,\n' +
+      '  type AutocompleteItem,\n' +
+      '} from "@mariozechner/pi-tui";\n' +
+      'import { Type } from "@sinclair/typebox";\n' +
+      'import { spawn } from "child_process";\n' +
+      'import {\n' +
+      '  existsSync,\n' +
+      '  mkdirSync,\n' +
+      '  readdirSync,\n' +
+      '  readFileSync,\n' +
+      '  unlinkSync,\n' +
+      '} from "fs";\n' +
+      'import { homedir } from "os";\n' +
+      'import { join, resolve } from "path";\n' +
+      '\n' +
+      '// ── Types ────────────────────────────────────────\n' +
+      '\n' +
+      'type SystemPromptType = "append" | "replace";\n' +
+      '\n' +
+      'interface AgentDef {\n' +
+      '  name: string;\n' +
+      '  description: string;\n' +
+      '  model: string;\n' +
+      '  tools: string;\n' +
+      '  systemPrompt: string;\n' +
+      '  customSystemPrompt: string;\n' +
+      '  systemPromptType: SystemPromptType;\n' +
+      '  file: string;\n' +
+      '}\n' +
+      '\n' +
+      'interface AgentState {\n' +
+      '  def: AgentDef;\n' +
+      '  status: "idle" | "running" | "done" | "error" | "disabled";\n' +
+      '  task: string;\n' +
+      '  toolCount: number;\n' +
+      '  elapsed: number;\n' +
+      '  lastWork: string;\n' +
+      '  contextPct: number;\n' +
+      '  sessionFile: string | null;\n' +
+      '  runCount: number;\n' +
+      '  timer?: ReturnType<typeof setInterval>;\n' +
+      '}\n' +
+      '\n' +
+      'interface AgentWidgetState {\n' +
+      '  selectedIndex: number;\n' +
+      '  expandedAgent: string | null;\n' +
+      '}\n' +
+      '\n' +
+      '\n' +
+      '// ── Display Name Helper ──────────────────────────\n' +
+      '\n' +
+      'function displayName(name: string): string {\n' +
+      '  return name\n' +
+      '    .split("-")\n' +
+      '    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))\n' +
+      '    .join(" ");\n' +
+      '}\n' +
+      '\n' +
+      '// ── Teams YAML Parser ────────────────────────────\n' +
+      '\n' +
+      'function parseTeamsYaml(raw: string): Record<string, string[]> {\n' +
+      '  const teams: Record<string, string[]> = {};\n' +
+      '  let current: string | null = null;\n' +
+      '  for (const line of raw.split("\\n")) {\n' +
+      '    const teamMatch = line.match(/^(\\S[^:]*):$/);\n' +
+      '    if (teamMatch) {\n' +
+      '      current = teamMatch[1].trim();\n' +
+      '      teams[current] = [];\n' +
+      '      continue;\n' +
+      '    }\n' +
+      '    const itemMatch = line.match(/^\\s+-\\s+(.+)$/);\n' +
+      '    if (itemMatch && current) {\n' +
+      '      teams[current].push(itemMatch[1].trim());\n' +
+      '    }\n' +
+      '  }\n' +
+      '  return teams;\n' +
+      '}\n' +
+      '\n' +
+      '// ── Frontmatter Parser ───────────────────────────\n' +
+      '\n' +
+      'function parseSimpleYamlFrontmatter(raw: string): Record<string, string> | null {\n' +
+      '  const result: Record<string, string> = {};\n' +
+      '  const lines = raw.replace(/\\r\\n/g, "\\n").split("\\n");\n' +
+      '\n' +
+      '  for (let i = 0; i < lines.length; i++) {\n' +
+      '    const line = lines[i];\n' +
+      '    if (!line.trim() || line.trimStart().startsWith("#")) continue;\n' +
+      '    if (/^\\s/.test(line)) return null;\n' +
+      '\n' +
+      '    const idx = line.indexOf(":");\n' +
+      '    if (idx <= 0) return null;\n' +
+      '\n' +
+      '    const key = line.slice(0, idx).trim();\n' +
+      '    let value = line.slice(idx + 1).trim();\n' +
+      '\n' +
+      '    if (value === "|" || value === ">") {\n' +
+      '      const blockLines: string[] = [];\n' +
+      '      i++;\n' +
+      '      for (; i < lines.length; i++) {\n' +
+      '        const blockLine = lines[i];\n' +
+      '        if (!blockLine.trim()) {\n' +
+      '          blockLines.push("");\n' +
+      '          continue;\n' +
+      '        }\n' +
+      '        if (!/^\\s+/.test(blockLine)) {\n' +
+      '          i--;\n' +
+      '          break;\n' +
+      '        }\n' +
+      '        blockLines.push(blockLine.replace(/^\\s{1,2}/, ""));\n' +
+      '      }\n' +
+      '      value =\n' +
+      '        value === ">"\n' +
+      '          ? blockLines\n' +
+      '              .join("\\n")\n' +
+      '              .split("\\n\\n")\n' +
+      '              .map((paragraph) => paragraph.replace(/\\n/g, " ").trim())\n' +
+      '              .join("\\n\\n")\n' +
+      '          : blockLines.join("\\n");\n' +
+      '    } else if (\n' +
+      `      (value.startsWith('"') && value.endsWith('"')) ||\n` +
+      `      (value.startsWith("'") && value.endsWith("'"))\n` +
+      '    ) {\n' +
+      '      value = value.slice(1, -1);\n' +
+      '    }\n' +
+      '\n' +
+      '    result[key] = value;\n' +
+      '  }\n' +
+      '\n' +
+      '  return result;\n' +
+      '}\n' +
+      '\n' +
+      'function parseSystemPromptType(value?: string): SystemPromptType {\n' +
+      '  return value === "append" ? "append" : "replace";\n' +
+      '}\n' +
+      '\n' +
+      'function buildAgentSystemPrompt(def: Pick<AgentDef, "customSystemPrompt" | "systemPrompt">): string {\n' +
+      '  return [def.customSystemPrompt, def.systemPrompt]\n' +
+      '    .filter((part) => part.trim().length > 0)\n' +
+      '    .join("\\n\\n");\n' +
+      '}\n' +
+      '\n' +
+      'function parseAgentFile(filePath: string): AgentDef | null {\n' +
+      '  try {\n' +
+      '    const raw = readFileSync(filePath, "utf-8");\n' +
+      '    const match = raw.match(/^---\\n([\\s\\S]*?)\\n---\\n([\\s\\S]*)$/);\n' +
+      '    if (!match) return null;\n' +
+      '\n' +
+      '    const frontmatter = parseSimpleYamlFrontmatter(match[1]);\n' +
+      '    if (!frontmatter?.name) return null;\n' +
+      '\n' +
+      '    return {\n' +
+      '      name: frontmatter.name,\n' +
+      '      description: frontmatter.description || "",\n' +
+      '      model: (frontmatter.model || "").trim(),\n' +
+      '      tools: frontmatter.tools || "read,grep,find,ls",\n' +
+      '      systemPrompt: match[2].trim(),\n' +
+      '      customSystemPrompt: (frontmatter["system-prompt"] || "").trim(),\n' +
+      '      systemPromptType: parseSystemPromptType(frontmatter["system-prompt-type"]),\n' +
+      '      file: filePath,\n' +
+      '    };\n' +
+      '  } catch {\n' +
+      '    return null;\n' +
+      '  }\n' +
+      '}\n' +
+      '\n' +
+      'function scanAgentDirs(cwd: string): AgentDef[] {\n' +
+      '  const dirs = [\n' +
+      '    join(cwd, "agents"),\n' +
+      '    join(cwd, ".claude", "agents"),\n' +
+      '    join(cwd, ".pi", "agents"),\n' +
+      '    join(homedir(), ".pi", "agent", "agents"),\n' +
+      '  ];\n' +
+      '\n' +
+      '  const agents: AgentDef[] = [];\n' +
+      '  const seen = new Set<string>();\n' +
+      '\n' +
+      '  for (const dir of dirs) {\n' +
+      '    if (!existsSync(dir)) continue;\n' +
+      '    try {\n' +
+      '      for (const file of readdirSync(dir)) {\n' +
+      '        if (!file.endsWith(".md")) continue;\n' +
+      '        const fullPath = resolve(dir, file);\n' +
+      '        const def = parseAgentFile(fullPath);\n' +
+      '        if (def && !seen.has(def.name.toLowerCase())) {\n' +
+      '          seen.add(def.name.toLowerCase());\n' +
+      '          agents.push(def);\n' +
+      '        }\n' +
+      '      }\n' +
+      '    } catch {}\n' +
+      '  }\n' +
+      '\n' +
+      '  return agents;\n' +
+      '}\n' +
+      '\n' +
+      'function findTeamsPath(cwd: string): string | null {\n' +
+      '  const localTeamsPath = join(cwd, ".pi", "agents", "teams.yaml");\n' +
+      '  if (existsSync(localTeamsPath)) return localTeamsPath;\n' +
+      '\n' +
+      '  const globalTeamsPath = join(\n' +
+      '    homedir(),\n' +
+      '    ".pi",\n' +
+      '    "agent",\n' +
+      '    "agents",\n' +
+      '    "teams.yaml",\n' +
+      '  );\n' +
+      '  if (existsSync(globalTeamsPath)) return globalTeamsPath;\n' +
+      '\n' +
+      '  return null;\n' +
+      '}\n' +
+      '\n' +
+      'function formatTeamsSource(cwd: string, teamsPath: string | null): string {\n' +
+      '  if (!teamsPath) return "generated default team";\n' +
+      '  return teamsPath === join(cwd, ".pi", "agents", "teams.yaml")\n' +
+      '    ? ".pi/agents/teams.yaml"\n' +
+      '    : "~/.pi/agent/agents/teams.yaml";\n' +
+      '}\n' +
+      '\n' +
+      '// ── Extension ────────────────────────────────────\n' +
+      '\n' +
+      'export default function (pi: ExtensionAPI) {\n' +
+      '  const agentStates: Map<string, AgentState> = new Map();\n' +
+      '  let allAgentDefs: AgentDef[] = [];\n' +
+      '  let teams: Record<string, string[]> = {};\n' +
+      '  let activeTeamName = "";\n' +
+      '  let gridCols = 2;\n' +
+      '  let widgetCtx: any;\n' +
+      '  let sessionDir = "";\n' +
+      '  let contextWindow = 0;\n' +
+      '  let isActive = true;\n' +
+      '  let previousActiveTools: string[] | null = null;\n' +
+      '  let teamsSource = "generated default team";\n' +
+      '  const widgetState: AgentWidgetState = {\n' +
+      '    selectedIndex: 0,\n' +
+      '    expandedAgent: null,\n' +
+      '  };\n' +
+      '\n' +
+      '  function loadAgents(cwd: string) {\n' +
+      '    // Create session storage dir\n' +
+      '    sessionDir = join(cwd, ".pi", "agent-sessions");\n' +
+      '    if (!existsSync(sessionDir)) {\n' +
+      '      mkdirSync(sessionDir, { recursive: true });\n' +
+      '    }\n' +
+      '\n' +
+      '    // Load all agent definitions\n' +
+      '    allAgentDefs = scanAgentDirs(cwd);\n' +
+      '\n' +
+      '    // Load teams from project-local or global config\n' +
+      '    const teamsPath = findTeamsPath(cwd);\n' +
+      '    teamsSource = formatTeamsSource(cwd, teamsPath);\n' +
+      '    if (teamsPath) {\n' +
+      '      try {\n' +
+      '        teams = parseTeamsYaml(readFileSync(teamsPath, "utf-8"));\n' +
+      '      } catch {\n' +
+      '        teams = {};\n' +
+      '      }\n' +
+      '    } else {\n' +
+      '      teams = {};\n' +
+      '    }\n' +
+      '\n' +
+      '    // If no teams defined, create a default "all" team\n' +
+      '    if (Object.keys(teams).length === 0) {\n' +
+      '      teams = { all: allAgentDefs.map((d) => d.name) };\n' +
+      '    }\n' +
+      '  }\n' +
+      '\n' +
+      '  function activateTeam(teamName: string) {\n' +
+      '    activeTeamName = teamName;\n' +
+      '    const members = teams[teamName] || [];\n' +
+      '    const defsByName = new Map(\n' +
+      '      allAgentDefs.map((d) => [d.name.toLowerCase(), d]),\n' +
+      '    );\n' +
+      '\n' +
+      '    agentStates.clear();\n' +
+      '    for (const member of members) {\n' +
+      '      const def = defsByName.get(member.toLowerCase());\n' +
+      '      if (!def) continue;\n' +
+      '      const key = def.name.toLowerCase().replace(/\\s+/g, "-");\n' +
+      '      const sessionFile = join(sessionDir, `${key}.json`);\n' +
+      '      agentStates.set(def.name.toLowerCase(), {\n' +
+      '        def,\n' +
+      '        status: "idle",\n' +
+      '        task: "",\n' +
+      '        toolCount: 0,\n' +
+      '        elapsed: 0,\n' +
+      '        lastWork: "",\n' +
+      '        contextPct: 0,\n' +
+      '        sessionFile: existsSync(sessionFile) ? sessionFile : null,\n' +
+      '        runCount: 0,\n' +
+      '      });\n' +
+      '    }\n' +
+      '\n' +
+      '    // Auto-size grid columns based on team size\n' +
+      '    const size = agentStates.size;\n' +
+      '    gridCols = size <= 3 ? size : size === 4 ? 2 : 3;\n' +
+      '    widgetState.selectedIndex = 0;\n' +
+      '    widgetState.expandedAgent = null;\n' +
+      '  }\n' +
+      '\n' +
+      '  // ── Grid Rendering ───────────────────────────\n' +
+      '\n' +
+      '  function clamp(value: number, min: number, max: number): number {\n' +
+      '    return Math.max(min, Math.min(max, value));\n' +
+      '  }\n' +
+      '\n' +
+      '  function truncateLine(text: string, width: number): string {\n' +
+      '    if (width <= 0) return "";\n' +
+      '    if (text.length <= width) return text;\n' +
+      '    if (width <= 3) return ".".repeat(width);\n' +
+      '    return text.slice(0, width - 3) + "...";\n' +
+      '  }\n' +
+      '\n' +
+      '  function wrapText(text: string, width: number, maxLines: number): string[] {\n' +
+      '    if (width <= 0 || maxLines <= 0) return [];\n' +
+      '\n' +
+      '    const words = text.replace(/\\s+/g, " ").trim().split(" ").filter(Boolean);\n' +
+      '    if (words.length === 0) return [""];\n' +
+      '\n' +
+      '    const lines: string[] = [];\n' +
+      '    let current = "";\n' +
+      '\n' +
+      '    for (const word of words) {\n' +
+      '      if (!current) {\n' +
+      '        current = word.length > width ? truncateLine(word, width) : word;\n' +
+      '        continue;\n' +
+      '      }\n' +
+      '\n' +
+      '      if (`${current} ${word}`.length <= width) {\n' +
+      '        current += ` ${word}`;\n' +
+      '        continue;\n' +
+      '      }\n' +
+      '\n' +
+      '      lines.push(current);\n' +
+      '      if (lines.length === maxLines) {\n' +
+      '        return lines;\n' +
+      '      }\n' +
+      ' '... 34168 more characters
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: |-
+    /**
+     * Agent Team — Dispatcher-only orchestrator with grid dashboard
+     *
+     * The primary Pi agent has NO codebase tools. It can ONLY delegate work
+     * to specialist agents via the `dispatch_agent` tool. Each specialist
+     * maintains its own Pi session for cross-invocation memory.
+     *
+     * Loads agent definitions from agents/*.md, .claude/agents/*.md, .pi/agents/*.md,
+     * and ~/.pi/agent/agents/*.md.
+     * Teams are defined in .pi/agents/teams.yaml — on boot a select dialog lets
+     * you pick which team to work with. Only team members are available for dispatch.
+     *
+     * Commands:
+     *   /agents-team          — switch active team
+     *   /agents-list          — list loaded agents
+     *   /agents-grid N        — set column count (default 2)
+     *
+     * Usage: pi -e extensions/agent-team.ts
+     */
+    
+    import { type ExtensionAPI } from "@mariozechner/pi-coding-agent";
+    import {
+      Key,
+      Text,
+      matchesKey,
+      truncateToWidth,
+      visibleWidth,
+      type AutocompleteItem,
+    } from "@mariozechner/pi-tui";
+    import { Type } from "@sinclair/typebox";
+    import { spawn } from "child_process";
+    import {
+      existsSync,
+      mkdirSync,
+      readdirSync,
+      readFileSync,
+      unlinkSync,
+    } from "fs";
+    import { homedir } from "os";
+    import { join, resolve } from "path";
+    
+    // ── Types ────────────────────────────────────────
+    
+    type SystemPromptType = "append" | "replace";
+    
+    interface AgentDef {
+      name: string;
+      description: string;
+      model: string;
+      tools: string;
+      systemPrompt: string;
+      customSystemPrompt: string;
+      systemPromptType: SystemPromptType;
+      file: string;
+    }
+    
+    interface AgentState {
+      def: AgentDef;
+      status: "idle" | "running" | "done" | "error" | "disabled";
+      task: string;
+      toolCount: number;
+      elapsed: number;
+      lastWork: string;
+      contextPct: number;
+      sessionFile: string | null;
+      runCount: number;
+      timer?: ReturnType<typeof setInterval>;
+    }
+    
+    interface AgentWidgetState {
+      selectedIndex: number;
+      expandedAgent: string | null;
+    }
+    
+    
+    // ── Display Name Helper ──────────────────────────
+    
+    function displayName(name: string): string {
+      return name
+        .split("-")
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ");
+    }
+    
+    // ── Teams YAML Parser ────────────────────────────
+    
+    function parseTeamsYaml(raw: string): Record<string, string[]> {
+      const teams: Record<string, string[]> = {};
+      let current: string | null = null;
+      for (const line of raw.split("\n")) {
+        const teamMatch = line.match(/^(\S[^:]*):$/);
+        if (teamMatch) {
+          current = teamMatch[1].trim();
+          teams[current] = [];
+          continue;
+        }
+        const itemMatch = line.match(/^\s+-\s+(.+)$/);
+        if (itemMatch && current) {
+          teams[current].push(itemMatch[1].trim());
+        }
+      }
+      return teams;
+    }
+    
+    // ── Frontmatter Parser ───────────────────────────
+    
+    function parseSimpleYamlFrontmatter(raw: string): Record<string, string> | null {
+      const result: Record<string, string> = {};
+      const lines = raw.replace(/\r\n/g, "\n").split("\n");
+    
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (!line.trim() || line.trimStart().startsWith("#")) continue;
+        if (/^\s/.test(line)) return null;
+    
+        const idx = line.indexOf(":");
+        if (idx <= 0) return null;
+    
+        const key = line.slice(0, idx).trim();
+        let value = line.slice(idx + 1).trim();
+    
+        if (value === "|" || value === ">") {
+          const blockLines: string[] = [];
+          i++;
+          for (; i < lines.length; i++) {
+            const blockLine = lines[i];
+            if (!blockLine.trim()) {
+              blockLines.push("");
+              continue;
+            }
+            if (!/^\s+/.test(blockLine)) {
+              i--;
+              break;
+            }
+            blockLines.push(blockLine.replace(/^\s{1,2}/, ""));
+          }
+          value =
+            value === ">"
+              ? blockLines
+                  .join("\n")
+                  .split("\n\n")
+                  .map((paragraph) => paragraph.replace(/\n/g, " ").trim())
+                  .join("\n\n")
+              : blockLines.join("\n");
+        } else if (
+          (value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'"))
+        ) {
+          value = value.slice(1, -1);
+        }
+    
+        result[key] = value;
+      }
+    
+      return result;
+    }
+    
+    function parseSystemPromptType(value?: string): SystemPromptType {
+      return value === "append" ? "append" : "replace";
+    }
+    
+    function buildAgentSystemPrompt(def: Pick<AgentDef, "customSystemPrompt" | "systemPrompt">): string {
+      return [def.customSystemPrompt, def.systemPrompt]
+        .filter((part) => part.trim().length > 0)
+        .join("\n\n");
+    }
+    
+    function parseAgentFile(filePath: string): AgentDef | null {
+      try {
+        const raw = readFileSync(filePath, "utf-8");
+        const match = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+        if (!match) return null;
+    
+        const frontmatter = parseSimpleYamlFrontmatter(match[1]);
+        if (!frontmatter?.name) return null;
+    
+        return {
+          name: frontmatter.name,
+          description: frontmatter.description || "",
+          model: (frontmatter.model || "").trim(),
+          tools: frontmatter.tools || "read,grep,find,ls",
+          systemPrompt: match[2].trim(),
+          customSystemPrompt: (frontmatter["system-prompt"] || "").trim(),
+          systemPromptType: parseSystemPromptType(frontmatter["system-prompt-type"]),
+          file: filePath,
+        };
+      } catch {
+        return null;
+      }
+    }
+    
+    function scanAgentDirs(cwd: string): AgentDef[] {
+      const dirs = [
+        join(cwd, "agents"),
+        join(cwd, ".claude", "agents"),
+        join(cwd, ".pi", "agents"),
+        join(homedir(), ".pi", "agent", "agents"),
+      ];
+    
+      const agents: AgentDef[] = [];
+      const seen = new Set<string>();
+    
+      for (const dir of dirs) {
+        if (!existsSync(dir)) continue;
+        try {
+          for (const file of readdirSync(dir)) {
+            if (!file.endsWith(".md")) continue;
+            const fullPath = resolve(dir, file);
+            const def = parseAgentFile(fullPath);
+            if (def && !seen.has(def.name.toLowerCase())) {
+              seen.add(def.name.toLowerCase());
+              agents.push(def);
+            }
+          }
+        } catch {}
+      }
+    
+      return agents;
+    }
+    
+    function findTeamsPath(cwd: string): string | null {
+      const localTeamsPath = join(cwd, ".pi", "agents", "teams.yaml");
+      if (existsSync(localTeamsPath)) return localTeamsPath;
+    
+      const globalTeamsPath = join(
+        homedir(),
+        ".pi",
+        "agent",
+        "agents",
+        "teams.yaml",
+      );
+      if (existsSync(globalTeamsPath)) return globalTeamsPath;
+    
+      return null;
+    }
+    
+    function formatTeamsSource(cwd: string, teamsPath: string | null): string {
+      if (!teamsPath) return "generated default team";
+      return teamsPath === join(cwd, ".pi", "agents", "teams.yaml")
+        ? ".pi/agents/teams.yaml"
+        : "~/.pi/agent/agents/teams.yaml";
+    }
+    
+    // ── Extension ────────────────────────────────────
+    
+    export default function (pi: ExtensionAPI) {
+      const agentStates: Map<string, AgentState> = new Map();
+      let allAgentDefs: AgentDef[] = [];
+      let teams: Record<string, string[]> = {};
+      let activeTeamName = "";
+      let gridCols = 2;
+      let widgetCtx: any;
+      let sessionDir = "";
+      let contextWindow = 0;
+      let isActive = true;
+      let previousActiveTools: string[] | null = null;
+      let teamsSource = "generated default team";
+      const widgetState: AgentWidgetState = {
+        selectedIndex: 0,
+        expandedAgent: null,
+      };
+    
+      function loadAgents(cwd: string) {
+        // Create session storage dir
+        sessionDir = join(cwd, ".pi", "agent-sessions");
+        if (!existsSync(sessionDir)) {
+          mkdirSync(sessionDir, { recursive: true });
+        }
+    
+        // Load all agent definitions
+        allAgentDefs = scanAgentDirs(cwd);
+    
+        // Load teams from project-local or global config
+        const teamsPath = findTeamsPath(cwd);
+        teamsSource = formatTeamsSource(cwd, teamsPath);
+        if (teamsPath) {
+          try {
+            teams = parseTeamsYaml(readFileSync(teamsPath, "utf-8"));
+          } catch {
+            teams = {};
+          }
+        } else {
+          teams = {};
+        }
+    
+        // If no teams defined, create a default "all" team
+        if (Object.keys(teams).length === 0) {
+          teams = { all: allAgentDefs.map((d) => d.name) };
+        }
+      }
+    
+      function activateTeam(teamName: string) {
+        activeTeamName = teamName;
+        const members = teams[teamName] || [];
+        const defsByName = new Map(
+          allAgentDefs.map((d) => [d.name.toLowerCase(), d]),
+        );
+    
+        agentStates.clear();
+        for (const member of members) {
+          const def = defsByName.get(member.toLowerCase());
+          if (!def) continue;
+          const key = def.name.toLowerCase().replace(/\s+/g, "-");
+          const sessionFile = join(sessionDir, `${key}.json`);
+          agentStates.set(def.name.toLowerCase(), {
+            def,
+            status: "idle",
+            task: "",
+            toolCount: 0,
+            elapsed: 0,
+            lastWork: "",
+            contextPct: 0,
+            sessionFile: existsSync(sessionFile) ? sessionFile : null,
+            runCount: 0,
+          });
+        }
+    
+        // Auto-size grid columns based on team size
+        const size = agentStates.size;
+        gridCols = size <= 3 ? size : size === 4 ? 2 : 3;
+        widgetState.selectedIndex = 0;
+        widgetState.expandedAgent = null;
+      }
+    
+      // ── Grid Rendering ───────────────────────────
+    
+      function clamp(value: number, min: number, max: number): number {
+        return Math.max(min, Math.min(max, value));
+      }
+    
+      function truncateLine(text: string, width: number): string {
+        if (width <= 0) return "";
+        if (text.length <= width) return text;
+        if (width <= 3) return ".".repeat(width);
+        return text.slice(0, width - 3) + "...";
+      }
+    
+      function wrapText(text: string, width: number, maxLines: number): string[] {
+        if (width <= 0 || maxLines <= 0) return [];
+    
+        const words = text.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+        if (words.length === 0) return [""];
+    
+        const lines: string[] = [];
+        let current = "";
+    
+        for (const word of words) {
+          if (!current) {
+            current = word.length > width ? truncateLine(word, width) : word;
+            continue;
+          }
+    
+          if (`${current} ${word}`.length <= width) {
+            current += ` ${word}`;
+            continue;
+          }
+    
+          lines.push(current);
+          if (lines.length === maxLines) {
+            return lines;
+          }
+          current = word.length > width ? truncateLine(word, width) : word;
+        }
+    
+        if (lines.length < maxLines && current) {
+          lines.push(current);
+        }
+    
+        if (lines.length > maxLines) {
+          return lines.slice(0, maxLines);
+        }
+    
+        return lines;
+      }
+    
+      function getStatusColor(status: AgentState["status"]): string {
+        return status === "idle"
+          ? "dim"
+          : status === "running"
+            ? "accent"
+            : status === "done"
+              ? "success"
+              : status === "disabled"
+                ? "muted"
+                : "error";
+      }
+    
+      function getStatusIcon(status: AgentState["status"]): string {
+        return status === "idle"
+          ? "○"
+          : status === "running"
+            ? "●"
+            : status === "done"
+              ? "✓"
+              : status === "disabled"
+                ? "⏸"
+                : "✗";
+      }
+    
+      function getContextBar(state: AgentState): string {
+        const filled = clamp(Math.ceil(state.contextPct / 20), 0, 5);
+        const bar = "#".repeat(filled) + "-".repeat(5 - filled);
+        return `[${bar}] ${Math.ceil(state.contextPct)}%`;
+      }
+    
+      function getAgentDetailLines(state: AgentState, contentWidth: number): string[] {
+        const description = truncateLine(state.def.description || "No description", contentWidth);
+        const task = truncateLine(state.task || "Waiting for work", contentWidth);
+        const currentWork = truncateLine(
+          state.status === "running"
+            ? state.lastWork || state.task || "Working..."
+            : state.lastWork || "No recent output",
+          contentWidth,
+        );
+        const model = truncateLine(`Model: ${state.def.model || "session default"}`, contentWidth);
+        const tools = truncateLine(`Tools: ${state.def.tools}`, contentWidth);
+        const runs = truncateLine(
+          `Runs: ${state.runCount} · Session: ${state.sessionFile ? "resume" : "new"}`,
+          contentWidth,
+        );
+    
+        const detailLines = [
+          `Role: ${description}`,
+          `Task: ${task}`,
+          `Doing: ${currentWork}`,
+          model,
+          tools,
+          runs,
+        ];
+    
+        if (state.def.customSystemPrompt) {
+          detailLines.push("Custom system prompt configured ✓");
+        }
+    
+        return detailLines.flatMap((line) => wrapText(line, contentWidth, 2));
+      }
+    
+      // ---- TODOs integration ----
+      // Reference: extensions/todos logic, prefer fast sync reads directly.
+      const { readdirSync, readFileSync, existsSync } = require("fs");
+      const path = require("path");
+      const os = require("os");
+      function getTodosDir(cwd: string): string {
+        const overridePath = process.env["PI_TODO_PATH"];
+        if (overridePath && overridePath.trim()) {
+          return path.resolve(cwd, overridePath.trim());
+        }
+        return path.join(os.homedir(), ".pi", "history", path.basename(cwd), "todos");
+      }
+      // Parses JSON front matter from todos
+      function parseTodoFrontMatter(text: string, id: string) {
+        const empty = { id, title: "", tags: [], status: "open", created_at: "", assigned_to_session: undefined };
+        const obj = text.trim();
+        if (!obj.startsWith("{")) return empty;
+        try {
+          const endIdx = text.indexOf("}") + 1;
+          if (endIdx <= 0) return empty;
+          return { ...empty, ...JSON.parse(text.slice(0, endIdx)) };
+        } catch {
+          return empty;
+        }
+      }
+      // Strike/dim logic and status normalization (matches ref_todo)
+      const TODO_STATUS_ICON: Record<string, string> = { completed: "✓", "in-progress": "◉", "not-started": "○" };
+      function normalizeTodoStatus(raw: string): "completed" | "in-progress" | "not-started" {
+        const s = raw.toLowerCase();
+        if (["completed", "done", "closed"].includes(s)) return "completed";
+        if (["in-progress", "inprogress", "progress", "active"].includes(s)) return "in-progress";
+        return "not-started";
+      }
+      // Per-agent session mapping: agent session resume file ~= assignment
+      function agentSessionName(agentDef: AgentDef): string {
+        // See how agent sessionFile is derived (".pi/agent-sessions/<slug>.json")
+        return `${agentDef.name.toLowerCase().replace(/\s+/g, "-")}.json`;
+      }
+      // Return todos for a given agent (or fallback to unassigned/project-wide)
+      function findAgentTodos(agentDef: AgentDef, cwd: string) {
+        const dir = getTodosDir(cwd);
+        let list: any[] = [];
+        try {
+          list = readdirSync(dir).filter((f: string) => f.endsWith(".md"));
+        } catch { return []; }
+        // prefer assignment to session file, fallback to unassigned
+        const sessionId = agentSessionName(agentDef);
+        const todos = list.map((f: string) => {
+          try {
+            const content = readFileSync(path.join(dir, f), "utf8");
+            const fm = parseTodoFrontMatter(content, f.replace(/\.md$/, ""));
+            return fm;
+          } catch { return null; }
+        }).filter(Boolean);
+        const mine = todos.filter(t => t.assigned_to_session === sessionId);
+        if (mine.length > 0) return mine;
+        // fallback to all open/unassigned todos
+        return todos.filter((t) => !t.assigned_to_session && !["closed", "done", "completed"].includes((t.status||"").toLowerCase()));
+      }
+      // Stats for a todo list
+      function todoStats(todos: any[]): { completed: number, total: number } {
+        const total = todos.length;
+        const completed = todos.filter(t => normalizeTodoStatus(t.status) === "completed").length;
+        return { completed, total };
+      }
+      // Returns sorted [last done, current (in-progress), next (not-started)] for context snippet
+      function contextualTodos(todos: any[]): any[] {
+        // Most recent completed, 1 in-progress, 1 next (by created_at if present)
+        const completed = todos
+          .filter(t => normalizeTodoStatus(t.status) === "completed")
+          .sort((a, b) => (b.created_at||"").localeCompare(a.created_at||""));
+        const inProgress = todos.find(t => normalizeTodoStatus(t.status) === "in-progress");
+        const notStarted = todos.filter(t => normalizeTodoStatus(t.status) === "not-started")
+          .sort((a, b) => (a.created_at||"").localeCompare(b.created_at||""));
+        const entries = [];
+        if (completed.length > 0) entries.push(completed[0]);
+        if (inProgress) entries.push(inProgress);
+        if (notStarted.length > 0) entries.push(notStarted[0]);
+        return entries;
+      }
+      // Rendering line for one todo
+      function renderAgentTodo(theme: any, todo: any, width: number) {
+        const icon = TODO_STATUS_ICON[normalizeTodoStatus(todo.status)] || "⏳";
+        let title = (todo.title || "(untitled)").slice(0, width-6);
+        if (normalizeTodoStatus(todo.status) === "completed") {
+          title = theme.fg("dim", theme.strikethrough ? theme.strikethrough(title) : title);
+        } else if (normalizeTodoStatus(todo.status) === "in-progress") {
+          title = theme.fg("warning", title);
+        }
+        return `${icon} ${title}`;
+      }
+    
+      // Patch existing renderCard to add todos UI around summary and below
+      function renderCard(
+        state: AgentState,
+        colWidth: number,
+        theme: any,
+        options: { expanded: boolean; selected: boolean },
+      ): string[] {
+        const w = Math.max(8, colWidth - 2);
+        const statusColor = getStatusColor(state.status);
+        const statusIcon = getStatusIcon(state.status);
+    
+        const topBorderColor = options.selected || options.expanded ? "accent" : "dim";
+        const sideBorderColor = options.selected || options.expanded ? "accent" : "dim";
+    
+        const top = "┌" + "─".repeat(w) + "┐";
+        const bot = "└" + "─".repeat(w) + "┘";
+        const border = (content: string, visibleLength: number) =>
+          theme.fg(sideBorderColor, "│") +
+          content +
+          " ".repeat(Math.max(0, w - visibleLength)) +
+          theme.fg(sideBorderColor, "│");
+    
+        const lines = [theme.fg(topBorderColor, top)];
+    
+        const namePrefix = options.expanded ? "▼ " : options.selected ? "▸ " : "  ";
+        const modelSuffix = state.def.model ? ` [${state.def.model}]` : "";
+        const nameText = truncateLine(namePrefix + displayName(state.def.name) + modelSuffix, w - 1);
+        lines.push(
+          border(
+            " " + theme.fg("accent", theme.bold(nameText)),
+            1 + nameText.length,
+          ),
+        );
+    
+        // ---- TODO Status headline ----
+        const todos = findAgentTodos(state.def, widgetCtx?.cwd||process.cwd());
+        const tstats = todoStats(todos);
+        let todoHeadline = tstats.total === 0
+          ? theme.fg("dim", "no todos")
+          : theme.fg("accent", `${tstats.completed} of ${tstats.total} todos done`);
+        lines.push(border(" " + todoHeadline, 1 + todoHeadline.length));
+    
+        const statusStr = `${statusIcon} ${state.status}${state.status !== "idle" ? ` ${Math.round(state.elapsed / 1000)}s` : ""}`;
+        const statusText = truncateLine(statusStr, w - 1);
+        lines.push(border(" " + theme.fg(statusColor, statusText), 1 + statusText.length));
+    
+        const ctxStr = getContextBar(state);
+        lines.push(border(" " + theme.fg("dim", ctxStr), 1 + ctxStr.length));
+    
+        const summaryLabel = state.status === "running" ? "Doing" : "Summary";
+        const summaryRaw = state.status === "running"
+          ? state.lastWork || state.task || "Working..."
+          : state.task
+            ? state.lastWork || state.task
+            : state.def.description;
+        const summaryLine = truncateLine(`${summaryLabel}: ${summaryRaw}`, w - 1);
+        lines.push(border(" " + theme.fg("muted", summaryLine), 1 + summaryLine.length));
+    
+        // ---- Contextual todos snippet ----
+        if (tstats.total > 0) {
+          lines.push(border(theme.fg("dim", "─".repeat(Math.max(2,w-2))), w));
+          const shown = contextualTodos(todos);
+          for (const todo of shown) {
+            const tline = renderAgentTodo(theme, todo, w-3);
+            lines.push(border("   " + tline, 3 + tline.length));
+          }
+        }
+    
+        if (options.expanded) {
+          for (const detail of getAgentDetailLines(state, w - 1)) {
+            lines.push(border(" " + theme.fg("muted", detail), 1 + detail.length));
+          }
+        } else if (state.def.customSystemPrompt) {
+          const promptText = truncateLine("Custom system prompt ✓", w - 1);
+          lines.push(border(" " + theme.fg("success", promptText), 1 + promptText.length));
+        }
+    
+        lines.push(theme.fg(topBorderColor, bot));
+        return lines;
+      }
+    
+      function handleWidgetNavigationInput(keyData: string): boolean {
+        const agents = Array.from(agentStates.values());
+        if (agents.length === 0) return false;
+    
+        // --- Expand/Collapse ---
+        // Only allow Ctrl+Space (and Cmd+Space if available) to expand/collapse
+        // Enter/Space/q/Backspace/Left (bare) are removed. Cmd detected if available.
+        const isCtrlOrCmd = (k: string) => matchesKey(keyData, Key.ctrl(k)) || (Key.cmd && matchesKey(keyData, Key.cmd(k)));
+        if (isCtrlOrCmd("space")) {
+          if (widgetState.expandedAgent) {
+            widgetState.expandedAgent = null;
+          } else {
+            const selectedAgent = agents[widgetState.selectedIndex];
+            if (selectedAgent) {
+              widgetState.expandedAgent = selectedAgent.def.name;
+            }
+          }
+          return true;
+        }
+    
+        // --- Collapse (when expanded) ---
+        // Only Esc collapses expanded view
+        if (widgetState.expandedAgent) {
+          if (matchesKey(keyData, Key.esc)) {
+            widgetState.expandedAgent = null;
+            return true;
+          }
+          return false;
+        }
+    
+        // --- Navigation: ONLY Ctrl+Arrow/Ctrl+hjkl, optionally Cmd if supported ---
+        const cols = Math.min(gridCols, agents.length);
+        const previousIndex = widgetState.selectedIndex;
+        const moveUp = isCtrlOrCmd("up") || isCtrlOrCmd("k");
+        const moveDown = isCtrlOrCmd("down") || isCtrlOrCmd("j");
+        const moveLeft = isCtrlOrCmd("left") || isCtrlOrCmd("h");
+        const moveRight = isCtrlOrCmd("right") || isCtrlOrCmd("l");
+    
+        if (moveUp) {
+          widgetState.selectedIndex = clamp(widgetState.selectedIndex - cols, 0, agents.length - 1);
+        } else if (moveDown) {
+          widgetState.selectedIndex = clamp(widgetState.selectedIndex + cols, 0, agents.length - 1);
+        } else if (moveLeft) {
+          widgetState.selectedIndex = clamp(widgetState.selectedIndex - 1, 0, agents.length - 1);
+        } else if (moveRight) {
+          widgetState.selectedIndex = clamp(widgetState.selectedIndex + 1, 0, agents.length - 1);
+        } else {
+          return false;
+        }
+        return widgetState.selectedIndex !== previousIndex;
+      }
+    
+      function clearWidgetAndFooter(ctx = widgetCtx) {
+        if (!ctx) return;
+        ctx.ui.setWidget("agent-team", undefined);
+        ctx.ui.setFooter(undefined);
+      }
+    
+      function setFooter(ctx = widgetCtx) {
+        if (!ctx) return;
+        ctx.ui.setFooter((_tui, theme, _footerData) => ({
+          dispose: () => {},
+          invalidate() {},
+          render(width: number): string[] {
+            if (!isActive) {
+              return [truncateToWidth("", width)];
+            }
+    
+            const model = ctx.model?.id || "no-model";
+            const usage = ctx.getContextUsage();
+            const pct = usage ? usage.percent : 0;
+            const filled = Math.round(pct / 10);
+            const bar = "#".repeat(filled) + "-".repeat(10 - filled);
+    
+            const left =
+              theme.fg("dim", ` ${model}`) +
+              theme.fg("muted", " · ") +
+              theme.fg("accent", activeTeamName);
+            const right = theme.fg("dim", `[${bar}] ${Math.round(pct)}% `);
+            const pad = " ".repeat(
+              Math.max(1, width - visibleWidth(left) - visibleWidth(right)),
+            );
+    
+            return [truncateToWidth(left + pad + right, width)];
+          },
+        }));
+      }
+    
+      function updateStatus(ctx = widgetCtx) {
+        if (!ctx) return;
+        ctx.ui.setStatus(
+          "agent-team",
+          isActive
+            ? `Team: ${activeTeamName} (${agentStates.size})`
+            : "Team: disabled",
+        );
+      }
+    
+      function updateWidget() {
+        if (!widgetCtx || !isActive) return;
+    
+        widgetCtx.ui.setWidget("agent-team", (_tui: any, theme: any) => {
+          const text = new Text("", 0, 1);
+    
+          return {
+            render(width: number): string[] {
+              if (agentStates.size === 0) {
+                text.setText(
+                  theme.fg(
+                    "dim",
+                    "No agents found. Add .md files to agents/, .pi/agents/, or ~/.pi/agent/agents/",
+                  ),
+                );
+                return text.render(width);
+              }
+    
+              const allAgents = Array.from(agentStates.values());
+              if (widgetState.selectedIndex >= allAgents.length) {
+                widgetState.selectedIndex = Math.max(0, allAgents.length - 1);
+              }
+    
+              const agents = widgetState.expandedAgent
+                ? allAgents.filter((agent) => agent.def.name === widgetState.expandedAgent)
+                : allAgents;
+    
+              const cols = widgetState.expandedAgent ? 1 : Math.min(gridCols, agents.length);
+              const gap = 1;
+              const colWidth = Math.floor((width - gap * (cols - 1)) / cols);
+              const rows: string[][] = [];
+    
+              for (let i = 0; i < agents.length; i += cols) {
+                const rowAgents = agents.slice(i, i + cols);
+                const cards = rowAgents.map((agent) => {
+                  const selectedAgent = allAgents[widgetState.selectedIndex];
+                  return renderCard(agent, colWidth, theme, {
+                    expanded: widgetState.expandedAgent === agent.def.name,
+                    selected: !widgetState.expandedAgent && selectedAgent?.def.name === agent.def.name,
+                  });
+                });
+    
+                const cardHeight = Math.max(...cards.map((card) => card.length));
+    
+                while (cards.length < cols) {
+                  cards.push(Array(cardHeight).fill(" ".repeat(colWidth)));
+                }
+                for (let line = 0; line < cardHeight; line++) {
+                  rows.push(cards.map((card) => card[line] || ""));
+                }
+              }
+    
+              // On-screen help text
+              let controls: string;
+              if (widgetState.expandedAgent) {
+                controls = theme.fg(
+                  "dim",
+                  "Ctrl+Space to collapse · Esc also close"
+                );
+              } else {
+                controls = theme.fg(
+                  "dim",
+                  "Ctrl+Arrow/Ctrl+h/j/k/l to navigate · Ctrl+Space to expand"
+                );
+              }
+              const output = rows.map((columns) => columns.join(" ".repeat(gap)));
+              text.setText(output.concat(["", controls]).join("\n"));
+              return text.render(width);
+            },
+            invalidate() {
+              text.invalidate();
+            },
+            handleInput(keyData: string) {
+              const handled = handleWidgetNavigationInput(keyData);
+              if (handled) {
+                text.invalidate();
+                updateWidget();
+              }
+            },
+          };
+        });
+      }
+    
+      function enableAgentTeam(ctx = widgetCtx) {
+        if (!ctx) return;
+    
+        widgetCtx = ctx;
+        isActive = true;
+        loadAgents(ctx.cwd);
+    
+        const teamNames = Object.keys(teams);
+        if (teamNames.length > 0) {
+          activateTeam(teams[activeTeamName] ? activeTeamName : teamNames[0]);
+        } else {
+          activeTeamName = "";
+          agentStates.clear();
+        }
+    
+        pi.setActiveTools(["dispatch_agent"]);
+        updateStatus(ctx);
+        updateWidget();
+        setFooter(ctx);
+      }
+    
+      // ── Dispatch Agent (returns Promise) ─────────
+    
+      function dispatchAgent(
+        agentName: string,
+        task: string,
+        ctx: any,
+      ): Promise<{ output: string; exitCode: number; elapsed: number }> {
+        if (!isActive) {
+          return Promise.resolve({
+            output:
+              "Agent team is deactivated. dispatch_agent is unavailable for this session.",
+            exitCode: 1,
+            elapsed: 0,
+          });
+        }
+    
+        const key = agentName.toLowerCase();
+        const state = agentStates.get(key);
+        if (!state) {
+          return Promise.resolve({
+            output: `Agent "${agentName}" not found. Available: ${Array.from(
+              agentStates.values(),
+            )
+              .map((s) => displayName(s.def.name))
+              .join(", ")}`,
+            exitCode: 1,
+            elapsed: 0,
+          });
+        }
+    
+        if (state.status === "running") {
+          return Promise.resolve({
+            output: `Agent "${displayName(state.def.name)}" is already running. Wait for it to finish.`,
+            exitCode: 1,
+            elapsed: 0,
+          });
+        }
+    
+        state.status = "running";
+        state.task = task;
+        state.toolCount = 0;
+        state.elapsed = 0;
+        state.lastWork = "";
+        state.runCount++;
+        updateWidget();
+    
+        const startTime = Date.now();
+        state.timer = setInterval(() => {
+          state.elapsed = Date.now() - startTime;
+          updateWidget();
+        }, 1000);
+    
+        const model = state.def.model || (ctx.model
+          ? `${ctx.model.provider}/${ctx.model.id}`
+          : "openrouter/google/gemini-3-flash-preview");
+    
+        // Session file for this agent
+        const agentKey = state.def.name.toLowerCase().replace(/\s+/g, "-");
+        const agentSessionFile = join(sessionDir, `${agentKey}.json`);
+    
+        // Build args — first run creates session, subsequent runs resume
+        const agentSystemPrompt = buildAgentSystemPrompt(state.def);
+    
+        const args = [
+          "--mode",
+          "json",
+          "-p",
+          "--no-extensions",
+          "--model",
+          model,
+          "--tools",
+          state.def.tools,
+          "--thinking",
+          "off",
+          state.def.systemPromptType === "append"
+            ? "--append-system-prompt"
+            : "--system-prompt",
+          agentSystemPrompt,
+          "--session",
+          agentSessionFile,
+        ];
+    
+        // Continue existing session if we have one
+        if (state.sessionFile) {
+          args.push("-c");
+        }
+    
+        args.push(task);
+    
+        const textChunks: string[] = [];
+    
+        return new Promise((resolve) => {
+          const proc = spawn("pi", args, {
+            stdio: ["ignore", "pipe", "pipe"],
+            env: { ...process.env },
+          });
+    
+          let buffer = "";
+    
+          proc.stdout!.setEncoding("utf-8");
+          proc.stdout!.on("data", (chunk: string) => {
+            buffer += chunk;
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+            for (const line of lines) {
+              if (!line.trim()) continue;
+              try {
+                const event = JSON.parse(line);
+                if (event.type === "message_update") {
+                  const delta = event.assistantMessageEvent;
+                  if (delta?.type === "text_delta") {
+                    textChunks.push(delta.delta || "");
+                    const full = textChunks.join("");
+                    const last =
+                      full
+                        .split("\n")
+                        .filter((l: string) => l.trim())
+                        .pop() || "";
+                    state.lastWork = last;
+                    updateWidget();
+                  }
+                } else if (event.type === "tool_execution_start") {
+                  state.toolCount++;
+                  updateWidget();
+                } else if (event.type === "message_end") {
+                  const msg = event.message;
+                  if (msg?.usage && contextWindow > 0) {
+                    state.contextPct =
+                      ((msg.usage.input || 0) / contextWindow) * 100;
+                    updateWidget();
+                  }
+                } else if (event.type === "agent_end") {
+                  const msgs = event.messages || [];
+                  const last = [...msgs]
+                    .reverse()
+                    .find((m: any) => m.role === "assistant");
+                  if (last?.usage && contextWindow > 0) {
+                    state.contextPct =
+                      ((last.usage.input || 0) / contextWindow) * 100;
+                    updateWidget();
+                  }
+                }
+              } catch {}
+            }
+          });
+    
+          proc.stderr!.setEncoding("utf-8");
+          proc.stderr!.on("data", () => {});
+    
+          proc.on("close", (code) => {
+            if (buffer.trim()) {
+              try {
+                const event = JSON.parse(buffer);
+                if (event.type === "message_update") {
+                  const delta = event.assistantMessageEvent;
+                  if (delta?.type === "text_delta")
+                    textChunks.push(delta.delta || "");
+                }
+              } catch {}
+            }
+    
+            clearInterval(state.timer);
+            state.elapsed = Date.now() - startTime;
+            state.status = isActive ? (code === 0 ? "done" : "error") : "disabled";
+    
+            // Mark session file as available for resume
+            if (code === 0) {
+              state.sessionFile = agentSessionFile;
+            }
+    
+            const full = textChunks.join("");
+            state.lastWork =
+              full
+                .split("\n")
+                .filter((l: string) => l.trim())
+                .pop() || "";
+            updateWidget();
+            if (!isActive) {
+              clearWidgetAndFooter(ctx);
+              updateStatus(ctx);
+            }
+    
+            ctx.ui.notify(
+              `${displayName(state.def.name)} ${state.status} in ${Math.round(state.elapsed / 1000)}s`,
+              state.status === "done" ? "success" : "error",
+            );
+    
+            resolve({
+              output: full,
+              exitCode: code ?? 1,
+              elapsed: state.elapsed,
+            });
+          });
+    
+          proc.on("error", (err) => {
+            clearInterval(state.timer);
+            state.status = isActive ? "error" : "disabled";
+            state.lastWork = `Error: ${err.message}`;
+            updateWidget();
+            if (!isActive) {
+              clearWidgetAndFooter(ctx);
+              updateStatus(ctx);
+            }
+            resolve({
+              output: `Error spawning agent: ${err.message}`,
+              exitCode: 1,
+              elapsed: Date.now() - startTime,
+            });
+          });
+        });
+      }
+    
+      // ── dispatch_agent Tool (registered at top level) ──
+    
+      pi.registerTool({
+        name: "dispatch_agent",
+        label: "Dispatch Agent",
+        description:
+          "Dispatch a task to a specialist agent. The agent will execute the task and return the result. Use the system prompt to see available agent names.",
+        parameters: Type.Object({
+          agent: Type.String({ description: "Agent name (case-insensitive)" }),
+          task: Type.String({
+            description: "Task description for the agent to execute",
+          }),
+        }),
+    
+        async execute(_toolCallId, params, _signal, onUpdate, ctx) {
+          const { agent, task } = params as { agent: string; task: string };
+    
+          try {
+            if (!isActive) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Agent team is deactivated. dispatch_agent is unavailable for this session.",
+                  },
+                ],
+                details: {
+                  agent,
+                  task,
+                  status: "error",
+                  elapsed: 0,
+                  exitCode: 1,
+                  fullOutput: "",
+                },
+              };
+            }
+    
+            if (onUpdate) {
+              onUpdate({
+                content: [{ type: "text", text: `Dispatching to ${agent}...` }],
+                details: { agent, task, status: "dispatching" },
+              });
+            }
+    
+            const result = await dispatchAgent(agent, task, ctx);
+    
+            const truncated =
+              result.output.length > 8000
+                ? result.output.slice(0, 8000) + "\n\n... [truncated]"
+                : result.output;
+    
+            const status = result.exitCode === 0 ? "done" : "error";
+            const summary = `[${agent}] ${status} in ${Math.round(result.elapsed / 1000)}s`;
+    
+            return {
+              content: [{ type: "text", text: `${summary}\n\n${truncated}` }],
+              details: {
+                agent,
+                task,
+                status,
+                elapsed: result.elapsed,
+                exitCode: result.exitCode,
+                fullOutput: result.output,
+              },
+            };
+          } catch (err: any) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Error dispatching to ${agent}: ${err?.message || err}`,
+                },
+              ],
+              details: {
+                agent,
+                task,
+                status: "error",
+                elapsed: 0,
+                exitCode: 1,
+                fullOutput: "",
+              },
+            };
+          }
+        },
+    
+        renderCall(args, theme) {
+          const agentName = (args as any).agent || "?";
+          const task = (args as any).task || "";
+          const preview = task.length > 60 ? task.slice(0, 57) + "..." : task;
+          return new Text(
+            theme.fg("toolTitle", theme.bold("dispatch_agent ")) +
+              theme.fg("accent", agentName) +
+              theme.fg("dim", " — ") +
+              theme.fg("muted", preview),
+            0,
+            0,
+          );
+        },
+    
+        renderResult(result, options, theme) {
+          const details = result.details as any;
+          if (!details) {
+            const text = result.content[0];
+            return new Text(text?.type === "text" ? text.text : "", 0, 0);
+          }
+    
+          // Streaming/partial result while agent is still running
+          if (options.isPartial || details.status === "dispatching") {
+            return new Text(
+              theme.fg("accent", `● ${details.agent || "?"}`) +
+                theme.fg("dim", " working..."),
+              0,
+              0,
+            );
+          }
+    
+          const icon = details.status === "done" ? "✓" : "✗";
+          const color = details.status === "done" ? "success" : "error";
+          const elapsed =
+            typeof details.elapsed === "number"
+              ? Math.round(details.elapsed / 1000)
+              : 0;
+          const header =
+            theme.fg(color, `${icon} ${details.agent}`) +
+            theme.fg("dim", ` ${elapsed}s`);
+    
+          if (options.expanded && details.fullOutput) {
+            const output =
+              details.fullOutput.length > 4000
+                ? details.fullOutput.slice(0, 4000) + "\n... [truncated]"
+                : details.fullOutput;
+            return new Text(header + "\n" + theme.fg("muted", output), 0, 0);
+          }
+    
+          return new Text(header, 0, 0);
+        },
+      });
+    
+      // ── Commands ─────────────────────────────────
+    
+      pi.registerCommand("agents-team", {
+        description: "Select a team to work with",
+        handler: async (_args, ctx) => {
+          widgetCtx = ctx;
+          if (!isActive) {
+            return "Agent team is deactivated for this session.";
+          }
+          const teamNames = Object.keys(teams);
+          if (teamNames.length === 0) {
+            ctx.ui.notify(
+              "No teams defined in .pi/agents/teams.yaml or ~/.pi/agent/agents/teams.yaml",
+              "warning",
+            );
+            return;
+          }
+    
+          const options = teamNames.map((name) => {
+            const members = teams[name].map((m) => displayName(m));
+            return `${name} — ${members.join(", ")}`;
+          });
+    
+          const choice = await ctx.ui.select("Select Team", options);
+          if (choice === undefined) return;
+    
+          const idx = options.indexOf(choice);
+          const name = teamNames[idx];
+          activateTeam(name);
+          updateWidget();
+          updateStatus(ctx);
+          ctx.ui.notify(
+            `Team: ${name} — ${Array.from(agentStates.values())
+              .map((s) => displayName(s.def.name))
+              .join(", ")}`,
+            "info",
+          );
+        },
+      });
+    
+      pi.registerCommand("agents-list", {
+        description: "List all loaded agents",
+        handler: async (_args, _ctx) => {
+          widgetCtx = _ctx;
+          if (!isActive) {
+            return "Agent team is deactivated for this session.";
+          }
+          const names = Array.from(agentStates.values())
+            .map((s) => {
+              const session = s.sessionFile ? "resumed" : "new";
+              return `${displayName(s.def.name)} (${s.status}, ${session}, runs: ${s.runCount}): ${s.def.description}`;
+            })
+            .join("\n");
+          _ctx.ui.notify(names || "No agents loaded", "info");
+        },
+      });
+    
+      pi.registerCommand("agents-grid", {
+        description: "Set grid columns: /agents-grid <1-6>",
+        getArgumentCompletions: (prefix: string): AutocompleteItem[] | null => {
+          const items = ["1", "2", "3", "4", "5", "6"].map((n) => ({
+            value: n,
+            label: `${n} columns`,
+          }));
+          const filtered = items.filter((i) => i.value.startsWith(prefix));
+          return filtered.length > 0 ? filtered : items;
+        },
+        handler: async (args, _ctx) => {
+          widgetCtx = _ctx;
+          if (!isActive) {
+            return "Agent team is deactivated for this session.";
+          }
+          const n = parseInt(args?.trim() || "", 10);
+          if (n >= 1 && n <= 6) {
+            gridCols = n;
+            _ctx.ui.notify(`Grid set to ${gridCols} columns`, "info");
+            updateWidget();
+          } else {
+            _ctx.ui.notify("Usage: /agents-grid <1-6>", "error");
+          }
+        },
+      });
+    
+    
+      pi.registerCommand("agents-team:deactivate", {
+        description: "Deactivate agent-team for the current session",
+        handler: async (_args, ctx) => {
+          widgetCtx = ctx;
+          isActive = false;
+    
+          for (const state of agentStates.values()) {
+            if (state.timer) {
+              clearInterval(state.timer);
+              state.timer = undefined;
+            }
+            state.status = "disabled";
+          }
+    
+          const restoredTools =
+            previousActiveTools && previousActiveTools.length > 0
+              ? previousActiveTools
+              : pi.getAllTools().map((t) => t.name);
+          pi.setActiveTools(restoredTools);
+    
+          clearWidgetAndFooter(ctx);
+          updateStatus(ctx);
+          ctx.ui.notify("Agent team deactivated for this session", "info");
+          return "Agent team deactivated for this session.";
+        },
+      });
+    
+      pi.registerCommand("agents-team:activate", {
+        description: "Activate agent-team for the current session",
+        handler: async (_args, ctx) => {
+          widgetCtx = ctx;
+          if (isActive) {
+            return "Agent team is already active for this session.";
+          }
+    
+          enableAgentTeam(ctx);
+    
+          const members = Array.from(agentStates.values())
+            .map((s) => displayName(s.def.name))
+            .join(", ");
+          ctx.ui.notify(
+            `Agent team activated for this session\n` +
+              `Team: ${activeTeamName} (${members})\n` +
+              `Team sets loaded from: ${teamsSource}`,
+            "info",
+          );
+          return "Agent team activated for this session.";
+        },
+      });
+    
+      // ── System Prompt Override ───────────────────
+    
+      pi.on("before_agent_start", async (_event, _ctx) => {
+        if (!isActive) return;
+    
+        // Build dynamic agent catalog from active team only
+        const agentCatalog = Array.from(agentStates.values())
+          .map(
+            (s) =>
+              `### ${displayName(s.def.name)}\n**Dispatch as:** \`${s.def.name}\`\n${s.def.description}\n**Tools:** ${s.def.tools}`,
+          )
+          .join("\n\n");
+    
+        const teamMembers = Array.from(agentStates.values())
+          .map((s) => displayName(s.def.name))
+          .join(", ");
+    
+        return {
+          systemPrompt: `You are a dispatcher agent. You coordinate specialist agents to accomplish tasks.
+    You do NOT have direct access to the codebase. You MUST delegate all work through
+    agents using the dispatch_agent tool.
+    
+    ## Active Team: ${activeTeamName}
+    Members: ${teamMembers}
+    You can ONLY dispatch to agents listed below. Do not attempt to dispatch to agents outside this team.
+    
+    ## How to Work
+    - Analyze the user's request and break it into clear sub-tasks
+    - Choose the right agent(s) for each sub-task
+    - Dispatch tasks using the dispatch_agent tool
+    - Review results and dispatch follow-up agents if needed
+    - If a task fails, try a different agent or adjust the task description
+    - Summarize the outcome for the user
+    
+    ## Rules
+    - NEVER try to read, write, or execute code directly — you have no such tools
+    - ALWAYS use dispatch_agent to get work done
+    - You can chain agents: use scout to explore, then builder to implement
+    - You can dispatch the same agent multiple times with different tasks
+    - Keep tasks focused — one clear objective per dispatch
+    
+    ## Agents
+    
+    ${agentCatalog}`,
+        };
+      });
+    
+      // ── Session Start ────────────────────────────
+    
+      pi.on("session_start", async (_event, _ctx) => {
+        // Clear widgets from previous session
+        if (widgetCtx) {
+          widgetCtx.ui.setWidget("agent-team", undefined);
+        }
+        widgetCtx = _ctx;
+        contextWindow = _ctx.model?.contextWindow || 0;
+        isActive = true;
+    
+        // Wipe old agent session files so subagents start fresh
+        const sessDir = join(_ctx.cwd, ".pi", "agent-sessions");
+        if (existsSync(sessDir)) {
+          for (const f of readdirSync(sessDir)) {
+            if (f.endsWith(".json")) {
+              try {
+                unlinkSync(join(sessDir, f));
+              } catch {}
+            }
+          }
+        }
+    
+        previousActiveTools = pi.getActiveTools();
+        enableAgentTeam(_ctx);
+    
+        const members = Array.from(agentStates.values())
+          .map((s) => displayName(s.def.name))
+          .join(", ");
+        _ctx.ui.notify(
+          `Team: ${activeTeamName} (${members})\n` +
+            `Team sets loaded from: ${teamsSource}\n\n` +
+            `/agents-team          Select a team\n` +
+            `/agents-team:activate Activate agent-team for this session\n` +
+            `/agents-team:deactivate Disable agent-team for this session\n` +
+            `/agents-list          List active agents and status\n` +
+            `/agents-grid <1-6>    Set grid column count`,
+          "info",
+        );
+        updateWidget();
+      });
+    }
+    
+  operator: 'doesNotMatch'
+  stack: |-
+    TestContext.<anonymous> (/home/jakobwgnr/projects/pi-config/extensions/agent-team/index.test.js:194:10)
+    Test.runInAsyncScope (node:async_hooks:211:14)
+    Test.run (node:internal/test_runner/test:979:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:677:18)
+    Test.postRun (node:internal/test_runner/test:1090:19)
+    Test.run (node:internal/test_runner/test:1018:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:677:7)
+  ...
+# Subtest: agent-team widget shows configured model beside agent name and in expanded details
+ok 15 - agent-team widget shows configured model beside agent name and in expanded details
+  ---
+  duration_ms: 0.082982
+  ...
+# Subtest: agent-team expanded card shows active work details
+ok 16 - agent-team expanded card shows active work details
+  ---
+  duration_ms: 0.089882
+  ...
+1..16
+# tests 16
+# suites 0
+# pass 14
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 45.254767

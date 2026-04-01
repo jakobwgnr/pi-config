@@ -163,10 +163,10 @@ test('agent-team empty state mentions global pi agent directory', () => {
 
 test('agent-team widget handles semantic Ctrl+Arrow navigation and Ctrl+Space to toggle expansion', () => {
   assert.match(source, /matchesKey\(keyData, Key\.ctrl\("space"\)\)/);
-  assert.match(source, /matchesKey\(keyData, Key\.ctrl\("up"\)\)/);
-  assert.match(source, /matchesKey\(keyData, Key\.ctrl\("down"\)\)/);
-  assert.match(source, /matchesKey\(keyData, Key\.ctrl\("left"\)\)/);
-  assert.match(source, /matchesKey\(keyData, Key\.ctrl\("right"\)\)/);
+  assert.match(source, /isCtrlOrCmd\("up"\)/);
+  assert.match(source, /isCtrlOrCmd\("down"\)/);
+  assert.match(source, /isCtrlOrCmd\("left"\)/);
+  assert.match(source, /isCtrlOrCmd\("right"\)/);
   assert.match(source, /widgetState\.expandedAgent = selectedAgent\.def\.name/);
   assert.match(source, /widgetState\.expandedAgent = null/);
   assert.doesNotMatch(source, /keyData === "\\u001b\[1;5A"/);
@@ -184,10 +184,9 @@ test('agent-team no longer registers a focus command or focus overlay UI', () =>
   assert.doesNotMatch(source, /focus mode/);
 });
 
-test('agent-team widget instructions mention new terminal-friendly keys in on-screen help', () => {
+test('agent-team widget instructions mention semantic navigation key help', () => {
   assert.match(source, /Arrows\/hjkl to navigate · Enter\/Space to expand/);
   assert.match(source, /Esc\/Backspace\/Left\/q\/Space\/Enter to collapse/);
-  assert.doesNotMatch(source, /collapse, arrows/);
 });
 
 

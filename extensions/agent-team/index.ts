@@ -435,6 +435,138 @@ export default function (pi: ExtensionAPI) {
     return detailLines.flatMap((line) => wrapText(line, contentWidth, 2));
   }
 
+  // ---- TODOs integration ----
+  // Reference: extensions/todos logic, reusing as much as possible.
+  const { readdirSync, readFileSync, existsSync } = require("fs");
+  const path = require("path");
+  const os = require("os");
+  // Adopt robust sync todos frontmatter parsing from the extension itself
+  function getTodosDir(cwd: string): string {
+    const overridePath = process.env["PI_TODO_PATH"];
+    if (overridePath && overridePath.trim()) {
+      return path.resolve(cwd, overridePath.trim());
+    }
+    return path.join(os.homedir(), ".pi", "history", path.basename(cwd), "todos");
+  }
+  function findJsonObjectEnd(content: string): number {
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let i = 0; i < content.length; i++) {
+      const char = content[i];
+      if (inString) {
+        if (escaped) { escaped = false; continue; }
+        if (char === "\\") { escaped = true; continue; }
+        if (char === '"') { inString = false; }
+        continue;
+      }
+      if (char === '"') { inString = true; continue; }
+      if (char === "{") { depth++; continue; }
+      if (char === "}") { depth--; if (depth === 0) return i; }
+    }
+    return -1;
+  }
+  function splitFrontMatter(content: string): { frontMatter: string; body: string } {
+    if (!content.startsWith("{")) {
+      return { frontMatter: "", body: content };
+    }
+    const endIndex = findJsonObjectEnd(content);
+    if (endIndex === -1) {
+      return { frontMatter: "", body: content };
+    }
+    const frontMatter = content.slice(0, endIndex + 1);
+    const body = content.slice(endIndex + 1).replace(/^\r?\n+/, "");
+    return { frontMatter, body };
+  }
+  function parseFrontMatter(text: string, idFallback: string): any {
+    const data: any = { id: idFallback, title: "", tags: [], status: "open", created_at: "", assigned_to_session: undefined };
+    const trimmed = text.trim();
+    if (!trimmed) return data;
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (!parsed || typeof parsed !== "object") return data;
+      if (typeof parsed.id === "string" && parsed.id) data.id = parsed.id;
+      if (typeof parsed.title === "string") data.title = parsed.title;
+      if (typeof parsed.status === "string" && parsed.status) data.status = parsed.status;
+      if (typeof parsed.created_at === "string") data.created_at = parsed.created_at;
+      if (typeof parsed.assigned_to_session === "string" && parsed.assigned_to_session.trim()) {
+        data.assigned_to_session = parsed.assigned_to_session;
+      }
+      if (Array.isArray(parsed.tags)) {
+        data.tags = parsed.tags.filter((tag) => typeof tag === "string");
+      }
+    } catch { return data; }
+    return data;
+  }
+  function parseTodoFile(filePath: string): any {
+    try {
+      const content = readFileSync(filePath, "utf8");
+      const { frontMatter } = splitFrontMatter(content);
+      return parseFrontMatter(frontMatter, path.basename(filePath, ".md"));
+    } catch { return null; }
+  }
+  // Strike/dim logic and status normalization (matches ref_todo)
+  const TODO_STATUS_ICON: Record<string, string> = { completed: "✓", "in-progress": "◉", "not-started": "○" };
+  function normalizeTodoStatus(raw: string): "completed" | "in-progress" | "not-started" {
+    const s = (raw||"").toLowerCase();
+    if (["completed", "done", "closed"].includes(s)) return "completed";
+    if (["in-progress", "inprogress", "progress", "active"].includes(s)) return "in-progress";
+    return "not-started";
+  }
+  function agentSessionName(agentDef: AgentDef): string {
+    return `${agentDef.name.toLowerCase().replace(/\s+/g, "-")}.json`;
+  }
+  function agentTodosAll(projectDir: string, sessionId: string|undefined): any[] {
+    // Read all todos for the project (sync, filtered)
+    const dir = getTodosDir(projectDir);
+    let files: string[] = [];
+    try { files = readdirSync(dir).filter(f => f.endsWith('.md')); } catch {}
+    return files.map(f => parseTodoFile(path.join(dir, f))).filter(Boolean);
+  }
+  function findAgentTodos(agentDef: AgentDef, cwd: string) {
+    const sessionId = agentSessionName(agentDef);
+    // All project todos, robust frontmatter parse
+    const todos: any[] = agentTodosAll(cwd, sessionId);
+    // First try: ALL assigned (any status) to this agent/session
+    const assigned = todos.filter(t => t.assigned_to_session === sessionId);
+    if (assigned.length > 0) return assigned;
+    // Fallback: all open and *unassigned* todos (not closed)
+    return todos.filter(t => !t.assigned_to_session && !["closed", "done", "completed"].includes((t.status||"").toLowerCase()));
+  }
+  function todoStats(todos: any[]): { completed: number, total: number } {
+    const total = todos.length;
+    const completed = todos.filter(t => normalizeTodoStatus(t.status) === "completed").length;
+    return { completed, total };
+  }
+  function contextualTodos(todos: any[]): any[] {
+    // Show: most recent completed (assigned or fallback), oldest in-progress, oldest not-started
+    const completed = todos
+      .filter(t => normalizeTodoStatus(t.status) === "completed")
+      .sort((a, b) => (b.created_at||"").localeCompare(a.created_at||""));
+    const inProgress = todos
+      .filter(t => normalizeTodoStatus(t.status) === "in-progress")
+      .sort((a, b) => (a.created_at||"").localeCompare(b.created_at||""));
+    const notStarted = todos
+      .filter(t => normalizeTodoStatus(t.status) === "not-started")
+      .sort((a, b) => (a.created_at||"").localeCompare(b.created_at||""));
+    const entries = [];
+    if (completed.length > 0) entries.push(completed[0]);
+    if (inProgress.length > 0) entries.push(inProgress[0]);
+    if (notStarted.length > 0) entries.push(notStarted[0]);
+    return entries;
+  }
+  function renderAgentTodo(theme: any, todo: any, width: number) {
+    const icon = TODO_STATUS_ICON[normalizeTodoStatus(todo.status)] || "⏳";
+    let title = (todo.title || "(untitled)").slice(0, width-6);
+    if (normalizeTodoStatus(todo.status) === "completed") {
+      title = theme.fg("dim", theme.strikethrough ? theme.strikethrough(title) : title);
+    } else if (normalizeTodoStatus(todo.status) === "in-progress") {
+      title = theme.fg("warning", title);
+    }
+    return `${icon} ${title}`;
+  }
+
+  // Patch existing renderCard to add todos UI around summary and below
   function renderCard(
     state: AgentState,
     colWidth: number,
@@ -468,6 +600,14 @@ export default function (pi: ExtensionAPI) {
       ),
     );
 
+    // ---- TODO Status headline ----
+    const todos = findAgentTodos(state.def, widgetCtx?.cwd||process.cwd());
+    const tstats = todoStats(todos);
+    let todoHeadline = tstats.total === 0
+      ? theme.fg("dim", "no todos")
+      : theme.fg("accent", `${tstats.completed} of ${tstats.total} todos done`);
+    lines.push(border(" " + todoHeadline, 1 + todoHeadline.length));
+
     const statusStr = `${statusIcon} ${state.status}${state.status !== "idle" ? ` ${Math.round(state.elapsed / 1000)}s` : ""}`;
     const statusText = truncateLine(statusStr, w - 1);
     lines.push(border(" " + theme.fg(statusColor, statusText), 1 + statusText.length));
@@ -483,6 +623,16 @@ export default function (pi: ExtensionAPI) {
         : state.def.description;
     const summaryLine = truncateLine(`${summaryLabel}: ${summaryRaw}`, w - 1);
     lines.push(border(" " + theme.fg("muted", summaryLine), 1 + summaryLine.length));
+
+    // ---- Contextual todos snippet ----
+    if (tstats.total > 0) {
+      lines.push(border(theme.fg("dim", "─".repeat(Math.max(2,w-2))), w));
+      const shown = contextualTodos(todos);
+      for (const todo of shown) {
+        const tline = renderAgentTodo(theme, todo, w-3);
+        lines.push(border("   " + tline, 3 + tline.length));
+      }
+    }
 
     if (options.expanded) {
       for (const detail of getAgentDetailLines(state, w - 1)) {
@@ -502,12 +652,10 @@ export default function (pi: ExtensionAPI) {
     if (agents.length === 0) return false;
 
     // --- Expand/Collapse ---
-    // Terminal-friendly: Enter/Space or Ctrl+Space to expand/collapse
-    if (
-      matchesKey(keyData, Key.ctrl("space")) || // old binding
-      matchesKey(keyData, Key.enter) ||
-      matchesKey(keyData, Key.space)
-    ) {
+    // Only allow Ctrl+Space (and Cmd+Space if available) to expand/collapse
+    // Enter/Space/q/Backspace/Left (bare) are removed. Cmd detected if available.
+    const isCtrlOrCmd = (k: string) => matchesKey(keyData, Key.ctrl(k)) || (Key.cmd && matchesKey(keyData, Key.cmd(k)));
+    if (isCtrlOrCmd("space")) {
       if (widgetState.expandedAgent) {
         widgetState.expandedAgent = null;
       } else {
@@ -520,33 +668,22 @@ export default function (pi: ExtensionAPI) {
     }
 
     // --- Collapse (when expanded) ---
+    // Only Esc collapses expanded view
     if (widgetState.expandedAgent) {
-      if (
-        matchesKey(keyData, Key.esc) ||
-        matchesKey(keyData, Key.backspace) ||
-        matchesKey(keyData, Key.left) ||
-        matchesKey(keyData, Key.q) ||
-        matchesKey(keyData, Key.ctrl("space")) ||
-        matchesKey(keyData, Key.space) || // pressing Space collapses also
-        matchesKey(keyData, Key.enter) // or Enter
-      ) {
+      if (matchesKey(keyData, Key.esc)) {
         widgetState.expandedAgent = null;
         return true;
       }
       return false;
     }
 
-    // --- Navigation: arrows and hjkl, plus old ctrl+arrow aliases ---
+    // --- Navigation: ONLY Ctrl+Arrow/Ctrl+hjkl, optionally Cmd if supported ---
     const cols = Math.min(gridCols, agents.length);
     const previousIndex = widgetState.selectedIndex;
-    const moveUp =
-      matchesKey(keyData, Key.up) || matchesKey(keyData, Key.k) || matchesKey(keyData, Key.ctrl("up"));
-    const moveDown =
-      matchesKey(keyData, Key.down) || matchesKey(keyData, Key.j) || matchesKey(keyData, Key.ctrl("down"));
-    const moveLeft =
-      matchesKey(keyData, Key.left) || matchesKey(keyData, Key.h) || matchesKey(keyData, Key.ctrl("left"));
-    const moveRight =
-      matchesKey(keyData, Key.right) || matchesKey(keyData, Key.l) || matchesKey(keyData, Key.ctrl("right"));
+    const moveUp = isCtrlOrCmd("up") || isCtrlOrCmd("k");
+    const moveDown = isCtrlOrCmd("down") || isCtrlOrCmd("j");
+    const moveLeft = isCtrlOrCmd("left") || isCtrlOrCmd("h");
+    const moveRight = isCtrlOrCmd("right") || isCtrlOrCmd("l");
 
     if (moveUp) {
       widgetState.selectedIndex = clamp(widgetState.selectedIndex - cols, 0, agents.length - 1);
@@ -559,7 +696,6 @@ export default function (pi: ExtensionAPI) {
     } else {
       return false;
     }
-
     return widgetState.selectedIndex !== previousIndex;
   }
 
