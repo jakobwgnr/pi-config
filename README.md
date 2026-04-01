@@ -56,6 +56,7 @@ Specialized roles with baked-in identity, workflow, and review rubrics.
 | **reviewer** | gpt-5.4 | Reviews code for quality, security, correctness (review rubric baked in) |
 | **researcher** | gpt-5.4 | Deep research using parallel.ai tools + Claude Code for code analysis |
 | **visual-tester** | gpt-4.1 | Visual QA for web UIs using Chrome CDP tooling |
+| **etl-development-expert** | gpt-5.4 | Implements ETL processes from approved mappings, including Rogue-based ETL repositories |
 
 `agents/autoresearch.md` is present as an experimental agent definition, but it depends on custom experiment tools that are not provisioned by this repo.
 
@@ -73,6 +74,7 @@ Loaded on-demand when the context matches.
 | **skill-creator** | Scaffolding new agent skills |
 | **add-mcp-server** | Adding MCP server configurations |
 | **plan** | Running the planner-led planning workflow |
+| **rogue** | Inspecting Rogue job repositories with `rogue/` jobs and `templates/` templates |
 
 ## Local Extensions
 

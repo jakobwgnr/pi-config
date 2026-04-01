@@ -11,3 +11,5 @@ data-migration:
   - source-system-specialist
   - target-system-specialist
   - data-mapping-expert
+  - etl-development-expert
+  - reviewer
