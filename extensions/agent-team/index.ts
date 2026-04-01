@@ -160,7 +160,7 @@ function formatTeamsSource(cwd: string, teamsPath: string | null): string {
   if (!teamsPath) return "generated default team";
   return teamsPath === join(cwd, ".pi", "agents", "teams.yaml")
     ? ".pi/agents/teams.yaml"
-    : "~/.pi/agents/teams.yaml";
+    : "~/.pi/agent/agents/teams.yaml";
 }
 
 // ── Extension ────────────────────────────────────
@@ -780,7 +780,7 @@ export default function (pi: ExtensionAPI) {
       const teamNames = Object.keys(teams);
       if (teamNames.length === 0) {
         ctx.ui.notify(
-          "No teams defined in .pi/agents/teams.yaml or ~/.pi/agents/teams.yaml",
+          "No teams defined in .pi/agents/teams.yaml or ~/.pi/agent/agents/teams.yaml",
           "warning",
         );
         return;
