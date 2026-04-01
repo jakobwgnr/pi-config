@@ -47,7 +47,7 @@ interface AgentDef {
 
 interface AgentState {
   def: AgentDef;
-  status: "idle" | "running" | "done" | "error";
+  status: "idle" | "running" | "done" | "error" | "disabled";
   task: string;
   toolCount: number;
   elapsed: number;
@@ -156,6 +156,8 @@ export default function (pi: ExtensionAPI) {
   let widgetCtx: any;
   let sessionDir = "";
   let contextWindow = 0;
+  let isActive = true;
+  let previousActiveTools: string[] | null = null;
 
   function loadAgents(cwd: string) {
     // Create session storage dir
@@ -234,7 +236,9 @@ export default function (pi: ExtensionAPI) {
           ? "accent"
           : state.status === "done"
             ? "success"
-            : "error";
+            : state.status === "disabled"
+              ? "muted"
+              : "error";
     const statusIcon =
       state.status === "idle"
         ? "○"
@@ -242,7 +246,9 @@ export default function (pi: ExtensionAPI) {
           ? "●"
           : state.status === "done"
             ? "✓"
-            : "✗";
+            : state.status === "disabled"
+              ? "⏸"
+              : "✗";
 
     const name = displayName(state.def.name);
     const nameStr = theme.fg("accent", theme.bold(truncate(name, w)));
@@ -286,8 +292,22 @@ export default function (pi: ExtensionAPI) {
     ];
   }
 
+  function clearWidgetAndFooter(ctx = widgetCtx) {
+    if (!ctx) return;
+    ctx.ui.setWidget("agent-team", undefined);
+    ctx.ui.setFooter(undefined);
+  }
+
+  function updateStatus(ctx = widgetCtx) {
+    if (!ctx) return;
+    ctx.ui.setStatus(
+      "agent-team",
+      isActive ? `Team: ${activeTeamName} (${agentStates.size})` : "Team: disabled",
+    );
+  }
+
   function updateWidget() {
-    if (!widgetCtx) return;
+    if (!widgetCtx || !isActive) return;
 
     widgetCtx.ui.setWidget("agent-team", (_tui: any, theme: any) => {
       const text = new Text("", 0, 1);
@@ -339,6 +359,14 @@ export default function (pi: ExtensionAPI) {
     task: string,
     ctx: any,
   ): Promise<{ output: string; exitCode: number; elapsed: number }> {
+    if (!isActive) {
+      return Promise.resolve({
+        output: "Agent team is deactivated. dispatch_agent is unavailable for this session.",
+        exitCode: 1,
+        elapsed: 0,
+      });
+    }
+
     const key = agentName.toLowerCase();
     const state = agentStates.get(key);
     if (!state) {
@@ -482,7 +510,7 @@ export default function (pi: ExtensionAPI) {
 
         clearInterval(state.timer);
         state.elapsed = Date.now() - startTime;
-        state.status = code === 0 ? "done" : "error";
+        state.status = isActive ? (code === 0 ? "done" : "error") : "disabled";
 
         // Mark session file as available for resume
         if (code === 0) {
@@ -496,6 +524,10 @@ export default function (pi: ExtensionAPI) {
             .filter((l: string) => l.trim())
             .pop() || "";
         updateWidget();
+        if (!isActive) {
+          clearWidgetAndFooter(ctx);
+          updateStatus(ctx);
+        }
 
         ctx.ui.notify(
           `${displayName(state.def.name)} ${state.status} in ${Math.round(state.elapsed / 1000)}s`,
@@ -511,9 +543,13 @@ export default function (pi: ExtensionAPI) {
 
       proc.on("error", (err) => {
         clearInterval(state.timer);
-        state.status = "error";
+        state.status = isActive ? "error" : "disabled";
         state.lastWork = `Error: ${err.message}`;
         updateWidget();
+        if (!isActive) {
+          clearWidgetAndFooter(ctx);
+          updateStatus(ctx);
+        }
         resolve({
           output: `Error spawning agent: ${err.message}`,
           exitCode: 1,
@@ -541,6 +577,25 @@ export default function (pi: ExtensionAPI) {
       const { agent, task } = params as { agent: string; task: string };
 
       try {
+        if (!isActive) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Agent team is deactivated. dispatch_agent is unavailable for this session.",
+              },
+            ],
+            details: {
+              agent,
+              task,
+              status: "error",
+              elapsed: 0,
+              exitCode: 1,
+              fullOutput: "",
+            },
+          };
+        }
+
         if (onUpdate) {
           onUpdate({
             content: [{ type: "text", text: `Dispatching to ${agent}...` }],
@@ -648,6 +703,9 @@ export default function (pi: ExtensionAPI) {
     description: "Select a team to work with",
     handler: async (_args, ctx) => {
       widgetCtx = ctx;
+      if (!isActive) {
+        return "Agent team is deactivated for this session.";
+      }
       const teamNames = Object.keys(teams);
       if (teamNames.length === 0) {
         ctx.ui.notify("No teams defined in .pi/agents/teams.yaml", "warning");
@@ -666,7 +724,7 @@ export default function (pi: ExtensionAPI) {
       const name = teamNames[idx];
       activateTeam(name);
       updateWidget();
-      ctx.ui.setStatus("agent-team", `Team: ${name} (${agentStates.size})`);
+      updateStatus(ctx);
       ctx.ui.notify(
         `Team: ${name} — ${Array.from(agentStates.values())
           .map((s) => displayName(s.def.name))
@@ -680,6 +738,9 @@ export default function (pi: ExtensionAPI) {
     description: "List all loaded agents",
     handler: async (_args, _ctx) => {
       widgetCtx = _ctx;
+      if (!isActive) {
+        return "Agent team is deactivated for this session.";
+      }
       const names = Array.from(agentStates.values())
         .map((s) => {
           const session = s.sessionFile ? "resumed" : "new";
@@ -702,6 +763,9 @@ export default function (pi: ExtensionAPI) {
     },
     handler: async (args, _ctx) => {
       widgetCtx = _ctx;
+      if (!isActive) {
+        return "Agent team is deactivated for this session.";
+      }
       const n = parseInt(args?.trim() || "", 10);
       if (n >= 1 && n <= 6) {
         gridCols = n;
@@ -713,9 +777,38 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
+  pi.registerCommand("agents-team:deactivate", {
+    description: "Deactivate agent-team for the current session",
+    handler: async (_args, ctx) => {
+      widgetCtx = ctx;
+      isActive = false;
+
+      for (const state of agentStates.values()) {
+        if (state.timer) {
+          clearInterval(state.timer);
+          state.timer = undefined;
+        }
+        state.status = "disabled";
+      }
+
+      const restoredTools =
+        previousActiveTools && previousActiveTools.length > 0
+          ? previousActiveTools
+          : pi.getAllTools().map((t) => t.name);
+      pi.setActiveTools(restoredTools);
+
+      clearWidgetAndFooter(ctx);
+      updateStatus(ctx);
+      ctx.ui.notify("Agent team deactivated for this session", "info");
+      return "Agent team deactivated for this session.";
+    },
+  });
+
   // ── System Prompt Override ───────────────────
 
   pi.on("before_agent_start", async (_event, _ctx) => {
+    if (!isActive) return;
+
     // Build dynamic agent catalog from active team only
     const agentCatalog = Array.from(agentStates.values())
       .map(
@@ -767,6 +860,7 @@ ${agentCatalog}`,
     }
     widgetCtx = _ctx;
     contextWindow = _ctx.model?.contextWindow || 0;
+    isActive = true;
 
     // Wipe old agent session files so subagents start fresh
     const sessDir = join(_ctx.cwd, ".pi", "agent-sessions");
@@ -782,6 +876,8 @@ ${agentCatalog}`,
 
     loadAgents(_ctx.cwd);
 
+    previousActiveTools = pi.getActiveTools();
+
     // Default to first team — use /agents-team to switch
     const teamNames = Object.keys(teams);
     if (teamNames.length > 0) {
@@ -791,10 +887,7 @@ ${agentCatalog}`,
     // Lock down to dispatcher-only (tool already registered at top level)
     pi.setActiveTools(["dispatch_agent"]);
 
-    _ctx.ui.setStatus(
-      "agent-team",
-      `Team: ${activeTeamName} (${agentStates.size})`,
-    );
+    updateStatus(_ctx);
     const members = Array.from(agentStates.values())
       .map((s) => displayName(s.def.name))
       .join(", ");
@@ -802,6 +895,7 @@ ${agentCatalog}`,
       `Team: ${activeTeamName} (${members})\n` +
         `Team sets loaded from: .pi/agents/teams.yaml\n\n` +
         `/agents-team          Select a team\n` +
+        `/agents-team:deactivate Disable agent-team for this session\n` +
         `/agents-list          List active agents and status\n` +
         `/agents-grid <1-6>    Set grid column count`,
       "info",
@@ -813,6 +907,10 @@ ${agentCatalog}`,
       dispose: () => {},
       invalidate() {},
       render(width: number): string[] {
+        if (!isActive) {
+          return [truncateToWidth("", width)];
+        }
+
         const model = _ctx.model?.id || "no-model";
         const usage = _ctx.getContextUsage();
         const pct = usage ? usage.percent : 0;

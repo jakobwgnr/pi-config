@@ -1,0 +1,6 @@
+small:
+  - worker
+
+data-migration:
+  - source-system-specialist
+  - target-system-specialist
