@@ -145,48 +145,33 @@ test('agent-team empty state mentions global pi agent directory', () => {
   assert.match(source, /~\/\.pi\/agent\/agents\//);
 });
 
-test('agent-team widget handles Space and Ctrl+Space to toggle expanded agent card', () => {
-  assert.match(source, /keyData === " "/);
-  assert.match(source, /keyData === "\\u0000"/);
+test('agent-team widget handles Ctrl+Arrow escape sequences for navigation and Ctrl+Space to toggle expansion', () => {
   assert.match(source, /Key\.ctrl\("space"\)/);
-  assert.match(source, /widgetState\.expandedAgent = selectedAgent\.def\.name/);
-  assert.match(source, /widgetState\.expandedAgent = null/);
-});
-
-
-test('agent-team widget handles Ctrl+Arrow escape sequences for navigation', () => {
   assert.match(source, /keyData === "\\u001b\[1;5A"/);
   assert.match(source, /keyData === "\\u001b\[1;5B"/);
   assert.match(source, /keyData === "\\u001b\[1;5C"/);
   assert.match(source, /keyData === "\\u001b\[1;5D"/);
+  assert.match(source, /widgetState\.expandedAgent = selectedAgent\.def\.name/);
+  assert.match(source, /widgetState\.expandedAgent = null/);
+  assert.doesNotMatch(source, /keyData === " "/);
+  assert.doesNotMatch(source, /keyData === "\\u0000"/);
 });
 
-test('agent-team registers a focus command for reliable keyboard interaction', () => {
-  assert.match(source, /pi\.registerCommand\("agents-team:focus"/);
-  assert.match(source, /ctx\.ui\.showOverlay\(focusComponent/);
-  assert.match(source, /ctx\.ui\.setFocus\(focusComponent\)/);
-  assert.match(source, /Ctrl\+Arrow to move, Space or Ctrl\+Space to expand\/collapse, Esc to return to the editor/);
-  assert.match(source, /Arrow\/Ctrl\+Arrow to navigate · Space\/Ctrl\+Space to expand/);
-  assert.match(source, /Space\/Ctrl\+Space to collapse/);
+test('agent-team no longer registers a focus command or focus overlay UI', () => {
+  assert.doesNotMatch(source, /pi\.registerCommand\("agents-team:focus"/);
+  assert.doesNotMatch(source, /ctx\.ui\.showOverlay\(/);
+  assert.doesNotMatch(source, /ctx\.ui\.setFocus\(/);
+  assert.doesNotMatch(source, /focus mode/);
 });
 
-test('agent-team focus overlay uses DynamicBorder from pi-coding-agent instead of pi-tui', () => {
-  assert.match(source, /import \{[\s\S]*DynamicBorder,[\s\S]*type ExtensionAPI,[\s\S]*\} from "@mariozechner\/pi-coding-agent"/);
-  assert.match(source, /type AutocompleteItem,[\s\S]*\} from "@mariozechner\/pi-tui"/);
-  assert.match(source, /new DynamicBorder\(\(value: string\) => value\)/);
+test('agent-team widget instructions mention Ctrl+Arrow navigation and Ctrl+Space expansion only', () => {
+  assert.match(source, /Ctrl\+Arrow to navigate · Ctrl\+Space to expand/);
+  assert.match(source, /Ctrl\+Space to collapse/);
+  assert.doesNotMatch(source, /Arrow\/Ctrl\+Arrow to navigate/);
+  assert.doesNotMatch(source, /Space\/Ctrl\+Space to expand/);
+  assert.doesNotMatch(source, /Space\/Ctrl\+Space to collapse/);
 });
 
-test('agent-team focus mode exits on Escape by closing the overlay without manual editor focus restoration', () => {
-  assert.match(source, /matchesKey\(keyData, Key\.escape\)/);
-  assert.doesNotMatch(source, /ctx\.ui\.setFocus\(\(ctx as any\)\.editor\)/);
-  assert.match(source, /ctx\.ui\.hideOverlay\(\)/);
-  assert.match(source, /ctx\.ui\.requestRender\(\)/);
-});
-
-test('agent-team widget hides other agents while one card is expanded', () => {
-  assert.match(source, /const agents = widgetState\.expandedAgent\s*\? allAgents\.filter\(\(agent\) => agent\.def\.name === widgetState\.expandedAgent\)\s*:\s*allAgents/);
-  assert.match(source, /const cols = widgetState\.expandedAgent \? 1 : Math\.min\(gridCols, agents\.length\)/);
-});
 
 test('agent-team expanded card shows active work details', () => {
   assert.match(source, /Doing: \$\{currentWork\}/);
