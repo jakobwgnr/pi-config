@@ -20,7 +20,11 @@
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import {
+  Container,
+  DynamicBorder,
   Text,
+  matchesKey,
+  Key,
   truncateToWidth,
   visibleWidth,
   type AutocompleteItem,
@@ -67,6 +71,12 @@ interface AgentState {
 interface AgentWidgetState {
   selectedIndex: number;
   expandedAgent: string | null;
+}
+
+interface AgentTeamFocusable {
+  handleInput(keyData: string): void;
+  focused?: boolean;
+  dispose?(): void;
 }
 
 // ── Display Name Helper ──────────────────────────
@@ -250,6 +260,7 @@ export default function (pi: ExtensionAPI) {
   let isActive = true;
   let previousActiveTools: string[] | null = null;
   let teamsSource = "generated default team";
+  let focusOverlayActive = false;
   const widgetState: AgentWidgetState = {
     selectedIndex: 0,
     expandedAgent: null,
@@ -489,8 +500,53 @@ export default function (pi: ExtensionAPI) {
     return lines;
   }
 
+  function handleWidgetNavigationInput(keyData: string): boolean {
+    const agents = Array.from(agentStates.values());
+    if (agents.length === 0) return false;
+
+    if (keyData === " ") {
+      if (widgetState.expandedAgent) {
+        widgetState.expandedAgent = null;
+      } else {
+        const selectedAgent = agents[widgetState.selectedIndex];
+        if (selectedAgent) {
+          widgetState.expandedAgent = selectedAgent.def.name;
+        }
+      }
+      return true;
+    }
+
+    if (widgetState.expandedAgent) {
+      return false;
+    }
+
+    const cols = Math.min(gridCols, agents.length);
+    const previousIndex = widgetState.selectedIndex;
+
+    if (keyData === "\u001b[A") {
+      widgetState.selectedIndex = clamp(widgetState.selectedIndex - cols, 0, agents.length - 1);
+    } else if (keyData === "\u001b[B") {
+      widgetState.selectedIndex = clamp(widgetState.selectedIndex + cols, 0, agents.length - 1);
+    } else if (keyData === "\u001b[D") {
+      widgetState.selectedIndex = clamp(widgetState.selectedIndex - 1, 0, agents.length - 1);
+    } else if (keyData === "\u001b[C") {
+      widgetState.selectedIndex = clamp(widgetState.selectedIndex + 1, 0, agents.length - 1);
+    } else {
+      return false;
+    }
+
+    return widgetState.selectedIndex !== previousIndex;
+  }
+
+  function exitAgentTeamFocus(ctx = widgetCtx) {
+    if (!focusOverlayActive || !ctx) return;
+    ctx.ui.hideOverlay();
+    focusOverlayActive = false;
+  }
+
   function clearWidgetAndFooter(ctx = widgetCtx) {
     if (!ctx) return;
+    exitAgentTeamFocus(ctx);
     ctx.ui.setWidget("agent-team", undefined);
     ctx.ui.setFooter(undefined);
   }
@@ -598,41 +654,8 @@ export default function (pi: ExtensionAPI) {
           text.invalidate();
         },
         handleInput(keyData: string) {
-          const agents = Array.from(agentStates.values());
-          if (agents.length === 0) return;
-
-          if (keyData === " ") {
-            if (widgetState.expandedAgent) {
-              widgetState.expandedAgent = null;
-            } else {
-              const selectedAgent = agents[widgetState.selectedIndex];
-              if (selectedAgent) {
-                widgetState.expandedAgent = selectedAgent.def.name;
-              }
-            }
-            text.invalidate();
-            updateWidget();
-            return;
-          }
-
-          if (widgetState.expandedAgent) {
-            return;
-          }
-
-          const cols = Math.min(gridCols, agents.length);
-          const previousIndex = widgetState.selectedIndex;
-
-          if (keyData === "\u001b[A") {
-            widgetState.selectedIndex = clamp(widgetState.selectedIndex - cols, 0, agents.length - 1);
-          } else if (keyData === "\u001b[B") {
-            widgetState.selectedIndex = clamp(widgetState.selectedIndex + cols, 0, agents.length - 1);
-          } else if (keyData === "\u001b[D") {
-            widgetState.selectedIndex = clamp(widgetState.selectedIndex - 1, 0, agents.length - 1);
-          } else if (keyData === "\u001b[C") {
-            widgetState.selectedIndex = clamp(widgetState.selectedIndex + 1, 0, agents.length - 1);
-          }
-
-          if (widgetState.selectedIndex !== previousIndex) {
+          const handled = handleWidgetNavigationInput(keyData);
+          if (handled) {
             text.invalidate();
             updateWidget();
           }
@@ -1095,6 +1118,69 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
+  pi.registerCommand("agent-team:focus", {
+    description: "Focus the agent-team widget for keyboard navigation",
+    handler: async (_args, ctx) => {
+      widgetCtx = ctx;
+      if (!isActive) {
+        return "Agent team is deactivated for this session.";
+      }
+      if (agentStates.size === 0) {
+        return "No agents are available in the active team.";
+      }
+      if (focusOverlayActive) {
+        return "Agent team focus mode is already active.";
+      }
+
+      const focusText = new Text("", 0, 0);
+      const spacer = new Text("", 0, 0);
+      const focusComponent = new Container() as Container & AgentTeamFocusable;
+
+      const renderFocusText = () => {
+        const agents = Array.from(agentStates.values());
+        const selectedAgent = agents[widgetState.selectedIndex];
+        const selectedName = selectedAgent ? displayName(selectedAgent.def.name) : "none";
+        const status = widgetState.expandedAgent
+          ? `Expanded: ${displayName(widgetState.expandedAgent)}`
+          : `Selected: ${selectedName}`;
+
+        focusText.setText([
+          "Agent Team Focus",
+          status,
+          "Use ↑↓←→ to move, Space to expand/collapse, Esc to return to the editor.",
+        ].join("\n"));
+        spacer.setText("");
+      };
+
+      focusComponent.focused = true;
+      focusComponent.addChild(new DynamicBorder());
+      focusComponent.addChild(focusText);
+      focusComponent.addChild(spacer);
+      focusComponent.addChild(new DynamicBorder());
+      focusComponent.handleInput = (keyData: string) => {
+        if (matchesKey(keyData, Key.escape) || matchesKey(keyData, Key.ctrl("c"))) {
+          exitAgentTeamFocus(ctx);
+          ctx.ui.setFocus((ctx as any).editor);
+          ctx.ui.notify("Agent team focus mode exited", "info");
+          return;
+        }
+
+        if (handleWidgetNavigationInput(keyData)) {
+          renderFocusText();
+          updateWidget();
+          ctx.ui.requestRender();
+        }
+      };
+
+      renderFocusText();
+      focusOverlayActive = true;
+      ctx.ui.showOverlay(focusComponent, { centered: true, width: 72, height: 8 });
+      ctx.ui.setFocus(focusComponent);
+      ctx.ui.notify("Agent team focus mode active", "info");
+      return "Agent team focus mode active. Use arrows to navigate, Space to expand, Esc to exit.";
+    },
+  });
+
   pi.registerCommand("agents-team:deactivate", {
     description: "Deactivate agent-team for the current session",
     handler: async (_args, ctx) => {
@@ -1225,6 +1311,7 @@ ${agentCatalog}`,
       `Team: ${activeTeamName} (${members})\n` +
         `Team sets loaded from: ${teamsSource}\n\n` +
         `/agents-team          Select a team\n` +
+        `/agent-team:focus     Focus the agent-team widget\n` +
         `/agents-team:activate Activate agent-team for this session\n` +
         `/agents-team:deactivate Disable agent-team for this session\n` +
         `/agents-list          List active agents and status\n` +

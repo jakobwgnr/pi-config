@@ -151,6 +151,19 @@ test('agent-team widget handles Space to toggle expanded agent card', () => {
   assert.match(source, /widgetState\.expandedAgent = null/);
 });
 
+test('agent-team registers a focus command for reliable keyboard interaction', () => {
+  assert.match(source, /pi\.registerCommand\("agent-team:focus"/);
+  assert.match(source, /ctx\.ui\.showOverlay\(focusComponent/);
+  assert.match(source, /ctx\.ui\.setFocus\(focusComponent\)/);
+  assert.match(source, /Space to expand\/collapse, Esc to return to the editor/);
+});
+
+test('agent-team focus mode exits on Escape and restores editor focus', () => {
+  assert.match(source, /matchesKey\(keyData, Key\.escape\)/);
+  assert.match(source, /ctx\.ui\.setFocus\(\(ctx as any\)\.editor\)/);
+  assert.match(source, /ctx\.ui\.hideOverlay\(\)/);
+});
+
 test('agent-team widget hides other agents while one card is expanded', () => {
   assert.match(source, /const agents = widgetState\.expandedAgent\s*\? allAgents\.filter\(\(agent\) => agent\.def\.name === widgetState\.expandedAgent\)\s*:\s*allAgents/);
   assert.match(source, /const cols = widgetState\.expandedAgent \? 1 : Math\.min\(gridCols, agents\.length\)/);
