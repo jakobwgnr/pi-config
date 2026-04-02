@@ -290,6 +290,8 @@ export default function (pi: ExtensionAPI) {
   let isActive = true;
   let previousActiveTools: string[] | null = null;
   let teamsSource = "generated default team";
+  /** After successful dispatch_agent, open /answer on parent session at agent_end (hasUI). */
+  let pendingAnswerAfterDispatch = false;
 
   function loadAgents(ctx: ExtensionContext) {
     const sessionId = ctx.sessionManager.getSessionId();
@@ -587,7 +589,7 @@ export default function (pi: ExtensionAPI) {
       activeTeamName = "";
       agentStates.clear();
     }
-    pi.setActiveTools(["dispatch_agent"]);
+    pi.setActiveTools(["dispatch_agent", "execute_command"]);
     updateStatus(ctx);
     updateWidget();
     setFooter(ctx);
@@ -843,6 +845,9 @@ export default function (pi: ExtensionAPI) {
           });
         }
         const result = await dispatchAgent(agent, task, ctx);
+        if (result.exitCode === 0) {
+          pendingAnswerAfterDispatch = true;
+        }
         const truncated =
           result.output.length > 8000
             ? result.output.slice(0, 8000) + "\n\n... [truncated]"
@@ -1005,6 +1010,7 @@ export default function (pi: ExtensionAPI) {
     handler: async (_args, ctx) => {
       widgetCtx = ctx;
       isActive = false;
+      pendingAnswerAfterDispatch = false;
       for (const state of agentStates.values()) {
         if (state.timer) {
           clearInterval(state.timer);
@@ -1043,6 +1049,14 @@ export default function (pi: ExtensionAPI) {
       return "Agent team activated for this session.";
     },
   });
+  pi.on("agent_end", async (_event, ctx) => {
+    if (!pendingAnswerAfterDispatch) return;
+    pendingAnswerAfterDispatch = false;
+    if (!isActive || !ctx.hasUI) return;
+    setTimeout(() => {
+      pi.events.emit("trigger:answer", ctx);
+    }, 100);
+  });
   pi.on("before_agent_start", async (_event, _ctx) => {
     if (!isActive) return;
     const agentCatalog = Array.from(agentStates.values())
@@ -1077,6 +1091,8 @@ You can ONLY dispatch to agents listed below. Do not attempt to dispatch to agen
 ## Rules
 - NEVER try to read, write, or execute code directly — you have no such tools
 - ALWAYS use dispatch_agent to get work done
+- After a successful specialist dispatch, the session may open /answer automatically so the user can respond to questions in the last reply
+- When you ask multiple questions in one message (without dispatching), use execute_command with command \`/answer\` so the user gets the Q&A UI
 - You can chain agents: use scout to explore, then builder to implement
 - You can dispatch the same agent multiple times with different tasks
 - Keep tasks focused — one clear objective per dispatch

@@ -125,6 +125,8 @@ You can execute slash commands yourself using the `execute_command` tool:
 - **Run `/answer`** after asking multiple questions — don't make the user invoke it
 - **Send follow-up prompts** to yourself
 
+When using **agent-team** as the main extension, the dispatcher has both `dispatch_agent` and `execute_command`. After each **successful** specialist dispatch, the parent session triggers `/answer` automatically so clarifications in the specialist’s output can be answered in the Q&A UI. If you ask several questions in your own dispatcher message (without a dispatch), still use `execute_command` with `/answer`.
+
 ### Delegate to Subagents
 
 **Prefer subagent delegation** for any task that involves multiple steps or could benefit from specialized focus.
