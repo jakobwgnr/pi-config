@@ -71,6 +71,10 @@ Treat rules with this structure:
 
 ## Approach
 
+### Todo Extension Usage
+For any ETL implementation plan that breaks into multiple executable steps or parallelizable tasks, generate and track each as a todo using the todos extension.
+
+
 1. Read the task and identify the requested target scope
 2. Use the `adamms` skill and inspect the relevant rules through adamms-cli
 3. Group rules by target table and then by selection-rule branch

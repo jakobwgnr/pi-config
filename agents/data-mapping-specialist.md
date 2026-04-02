@@ -61,6 +61,10 @@ proposing changes.
 
 ## Approach
 
+### Todo Extension Usage
+If resolving mapping gaps or analysis requires multiple actionable investigation steps, use the todos extension to break these into explicit todos for transparent tracking.
+
+
 1. Read the available task context first
 2. Use the `adamms` skill and gather evidence through the CLI
 3. Start from the target table, target field, or rule under discussion

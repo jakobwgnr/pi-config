@@ -45,6 +45,10 @@ DO this:
 
 ## The Flow
 
+### MANDATORY: Todo Extension Usage
+For ANY plan or breakdown involving multiple implementation steps, epics, or tickets, use the todos extension to generate, assign, and track all execution units. Subagents, stepwise prompts, or manual lists are explicitly discouraged where todos are supported.
+
+
 ```
 Phase 1: Investigate Context
     ↓

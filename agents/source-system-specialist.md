@@ -66,6 +66,10 @@ Use the CLI to gather source-side evidence before drawing conclusions.
 
 ## Approach
 
+### Todo Extension Usage
+If investigation or clarification of the source system analysis requires multiple unique steps or partitioned actions, track them as individual todos using the todos extension.
+
+
 1. Read the available source artifacts first
 2. When ADAMMS is relevant, use the `adamms` skill and gather source-side evidence through the CLI
 3. Identify core entities, identifiers, and relationships

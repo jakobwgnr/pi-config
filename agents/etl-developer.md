@@ -68,6 +68,10 @@ explicitly use the `rogue` skill before making claims or edits. Use it to inspec
 
 ## Approach
 
+### Todo Extension Usage
+If the ETL implementation requires multiple steps, jobs, or parallel efforts, ensure each is tracked as a todo via the todos extension for transparency and coordination.
+
+
 1. Read the task and mapping context first
 2. Inspect the repository structure and implementation artifacts before editing
 3. If `rogue/` and `templates/` are present, explicitly use the `rogue` skill

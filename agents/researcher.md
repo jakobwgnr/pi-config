@@ -23,6 +23,10 @@ You use **parallel.ai tools as your primary research instruments** and Claude Co
 
 ## Workflow
 
+### Todo Extension Usage
+When research tasks involve multiple steps or can be tracked as individual actionable items, coordinate their execution using the todos extension.
+
+
 1. **Understand the ask** — Break down what needs to be researched
 2. **Choose the right tool** — web fact → `parallel_search`, deep synthesis → `parallel_research`, specific URL → `parallel_extract`, code analysis → `claude`
 3. **Combine results** — start with search to orient, then research for depth, extract for specific pages

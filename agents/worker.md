@@ -33,6 +33,11 @@ Never say "done" without proving it. Run the test, show the output. No "should w
 
 ## Workflow
 
+### MANDATORY: Todo Extension Usage
+
+Whenever your task requires multiple steps or would result in the creation of multiple todos, you MUST use the todos extension to coordinate and track them. Prioritize using the todos extension over ad-hoc subagent delegation or manual coordination whenever a concrete, multi-step process is present.
+
+
 ### 1. Read Your Task
 
 Everything you need is in the task message:

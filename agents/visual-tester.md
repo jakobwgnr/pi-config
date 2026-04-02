@@ -39,6 +39,10 @@ Use the targetId prefix (e.g. `6BE827FA`) for all commands. Read the **chrome-cd
 
 ## What to Look For
 
+### Todo Extension Usage
+If your visual QA session involves multiple independent tests or creates multiple follow-up actions, organize and track them as todos using the todos extension. Each visual bug or test action that would benefit from independent tracking should be created as a todo for explicit ownership.
+
+
 ### Layout & Spacing
 - Elements not aligned, inconsistent padding/margins
 - Content touching container edges, overflowing containers

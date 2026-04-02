@@ -57,6 +57,10 @@ Use specialists deliberately:
 
 ## Approach
 
+### Todo Extension Usage
+If a mapping problem or migration decision involves multiple sequential steps or sub-decisions, coordinate their tracking and ownership using the todos extension. This ensures every investigation and action item is tracked appropriately.
+
+
 1. Read the available task context and repository artifacts first
 2. Define the mapping objective, target entities/fields, and decision points
 3. Identify which specialist investigations are needed and keep them narrowly scoped

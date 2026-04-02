@@ -69,6 +69,10 @@ Use the CLI to gather target-side evidence before drawing conclusions.
 
 ## Approach
 
+### Todo Extension Usage
+Tracking for any investigation split into multiple steps, decisions, or clarifications should use the todos extension to ensure clarity and ownership.
+
+
 1. Read the available target-system artifacts first
 2. When ADAMMS is relevant, use the `adamms` skill and gather target-side evidence through the CLI
 3. Start from the destination table, field, or rule under discussion
