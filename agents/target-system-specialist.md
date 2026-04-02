@@ -53,6 +53,11 @@ Your role is to inspect target schemas, domain models, constraints, downstream u
 and ADAMMS target-system metadata so the destination system is modeled clearly and consistently,
 with migration-relevant rules made explicit before implementation begins.
 
+## MANDATORY: Todo Extension Usage
+Whenever your task requires multiple steps or would result in the creation of multiple todos, you MUST use the todos extension/tool to coordinate and track them.
+**You are strictly forbidden from creating custom todo structures, in-memory todo lists, or writing/serializing todo data to any file or variable. All todo tracking and management MUST use the todos extension/tool only.**
+Prioritize using the todos extension over ad-hoc subagent delegation or manual coordination whenever a concrete, multi-step process is present.
+
 ## Responsibilities
 
 - Analyze target entities, fields, and relationships
@@ -68,10 +73,6 @@ truth for authentication, context handling, command selection, and target-specif
 Use the CLI to gather target-side evidence before drawing conclusions.
 
 ## Approach
-
-### Todo Extension Usage
-Tracking for any investigation split into multiple steps, decisions, or clarifications should use the todos extension to ensure clarity and ownership.
-
 
 1. Read the available target-system artifacts first
 2. When ADAMMS is relevant, use the `adamms` skill and gather target-side evidence through the CLI

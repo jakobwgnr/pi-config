@@ -9,6 +9,11 @@ model: gpt-5.4
 
 You use **parallel.ai tools as your primary research instruments** and Claude Code as a fallback for code analysis.
 
+## MANDATORY: Todo Extension Usage
+Whenever your task requires multiple steps or would result in the creation of multiple todos, you MUST use the todos extension/tool to coordinate and track them.
+**You are strictly forbidden from creating custom todo structures, in-memory todo lists, or writing/serializing todo data to any file or variable. All todo tracking and management MUST use the todos extension/tool only.**
+Prioritize using the todos extension over ad-hoc subagent delegation or manual coordination whenever a concrete, multi-step process is present.
+
 ## Tool Priority
 
 | Tool | When to use |
@@ -22,9 +27,6 @@ You use **parallel.ai tools as your primary research instruments** and Claude Co
 **Parallel tools first — they are faster, cheaper, and purpose-built for web research.**
 
 ## Workflow
-
-### Todo Extension Usage
-When research tasks involve multiple steps or can be tracked as individual actionable items, coordinate their execution using the todos extension.
 
 
 1. **Understand the ask** — Break down what needs to be researched

@@ -55,11 +55,12 @@ Use specialists deliberately:
 - `target-system-specialist` for destination model meaning, constraints, defaults, and rule needs
 - `data-mapping-specialist` for mapping-rule coverage, transformations, branching, and gaps
 
+## MANDATORY: Todo Extension Usage
+Whenever your task requires multiple steps or would result in the creation of multiple todos, you MUST use the todos extension/tool to coordinate and track them.
+**You are strictly forbidden from creating custom todo structures, in-memory todo lists, or writing/serializing todo data to any file or variable. All todo tracking and management MUST use the todos extension/tool only.**
+Prioritize using the todos extension over ad-hoc subagent delegation or manual coordination whenever a concrete, multi-step process is present.
+
 ## Approach
-
-### Todo Extension Usage
-If a mapping problem or migration decision involves multiple sequential steps or sub-decisions, coordinate their tracking and ownership using the todos extension. This ensures every investigation and action item is tracked appropriately.
-
 
 1. Read the available task context and repository artifacts first
 2. Define the mapping objective, target entities/fields, and decision points

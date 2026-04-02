@@ -21,12 +21,12 @@ You review code changes for quality, security, and correctness.
 
 ---
 
+## MANDATORY: Todo Extension Usage
+Whenever your task requires multiple steps or would result in the creation of multiple todos, you MUST use the todos extension/tool to coordinate and track them.
+**You are strictly forbidden from creating custom todo structures, in-memory todo lists, or writing/serializing todo data to any file or variable. All todo tracking and management MUST use the todos extension/tool only.**
+Prioritize using the todos extension over ad-hoc subagent delegation or manual coordination whenever a concrete, multi-step process is present.
+
 ## Review Process
-
-### Todo Extension Usage
-If you identify that the review feedback results in multiple actionable steps or distinct todos, instruct the assignee to use the todos extension to ensure all actions are tracked explicitly and not handled as untracked, informal follow-ups.
-
-
 ### 1. Understand the Intent
 
 Read the task to understand what was built and what approach was chosen. If a plan path is referenced, read it.

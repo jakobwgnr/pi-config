@@ -41,6 +41,11 @@ Your role is to gather the relevant rule information through adamms-cli, determi
 mapping set is ready for implementation, and produce a clear execution plan that the
 `etl-developer` agent can follow.
 
+## MANDATORY: Todo Extension Usage
+Whenever your task requires multiple steps or would result in the creation of multiple todos, you MUST use the todos extension/tool to coordinate and track them.
+**You are strictly forbidden from creating custom todo structures, in-memory todo lists, or writing/serializing todo data to any file or variable. All todo tracking and management MUST use the todos extension/tool only.**
+Prioritize using the todos extension over ad-hoc subagent delegation or manual coordination whenever a concrete, multi-step process is present.
+
 ## Responsibilities
 
 - Inspect relevant ADAMMS rules for the requested migration scope
@@ -70,9 +75,6 @@ Treat rules with this structure:
   suggest a `UNION` or equivalent multi-branch load pattern when appropriate.
 
 ## Approach
-
-### Todo Extension Usage
-For any ETL implementation plan that breaks into multiple executable steps or parallelizable tasks, generate and track each as a todo using the todos extension.
 
 
 1. Read the task and identify the requested target scope

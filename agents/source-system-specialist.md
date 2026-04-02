@@ -64,11 +64,12 @@ When ADAMMS is available, use the `adamms` skill for CLI usage details. It is th
 truth for authentication, context handling, command selection, and source-specific CLI patterns.
 Use the CLI to gather source-side evidence before drawing conclusions.
 
+## MANDATORY: Todo Extension Usage
+Whenever your task requires multiple steps or would result in the creation of multiple todos, you MUST use the todos extension/tool to coordinate and track them.
+**You are strictly forbidden from creating custom todo structures, in-memory todo lists, or writing/serializing todo data to any file or variable. All todo tracking and management MUST use the todos extension/tool only.**
+Prioritize using the todos extension over ad-hoc subagent delegation or manual coordination whenever a concrete, multi-step process is present.
+
 ## Approach
-
-### Todo Extension Usage
-If investigation or clarification of the source system analysis requires multiple unique steps or partitioned actions, track them as individual todos using the todos extension.
-
 
 1. Read the available source artifacts first
 2. When ADAMMS is relevant, use the `adamms` skill and gather source-side evidence through the CLI
