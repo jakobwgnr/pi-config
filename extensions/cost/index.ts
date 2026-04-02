@@ -35,7 +35,8 @@ function extractCosts(filePath: string): CostEntry[] {
   return entries;
 }
 
-function findJsonlFiles(dir: string): string[] {
+/** Recursively collect *.jsonl (main sessions are nested by project; agent-team uses .pi/agent-sessions/<mainSessionId>/*.jsonl). */
+function findJsonlFilesRecursive(dir: string): string[] {
   const files: string[] = [];
   try {
     if (!fs.existsSync(dir)) return files;
@@ -86,12 +87,13 @@ export default function (pi: ExtensionAPI) {
 
       const cutoff = getCutoffDate(days);
       const sessionsDir = path.join(os.homedir(), ".pi", "agent", "sessions");
+      // Subagent Pi sessions: one directory per main session UUID under here (see agent-team extension).
       const subagentDir = path.join(ctx.cwd, ".pi", "agent-sessions");
 
       // Collect main sessions
-      const mainFiles = findJsonlFiles(sessionsDir);
-      // Collect subagent sessions
-      const subagentFiles = findJsonlFiles(subagentDir);
+      const mainFiles = findJsonlFilesRecursive(sessionsDir);
+      // Collect subagent sessions (includes nested UUID subdirs)
+      const subagentFiles = findJsonlFilesRecursive(subagentDir);
 
       // Process
       let mainCost = 0;

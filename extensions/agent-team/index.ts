@@ -13,7 +13,10 @@
  * Usage: pi -e extensions/agent-team.ts
  */
 
-import { type ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import {
+  type ExtensionAPI,
+  type ExtensionContext,
+} from "@mariozechner/pi-coding-agent";
 import {
   Text,
   truncateToWidth,
@@ -22,13 +25,7 @@ import {
 } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { spawn } from "child_process";
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  unlinkSync,
-} from "fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync } from "fs";
 import { homedir } from "os";
 import { join, resolve } from "path";
 
@@ -243,20 +240,22 @@ export default function (pi: ExtensionAPI) {
   let activeTeamName = "";
   let gridCols = 2;
   let widgetCtx: any;
-  let sessionDir = join(homedir(), ".pi", "agent", "sessions");
+  /** Set in loadAgents from ctx.sessionManager.getSessionId(); empty until first load. */
+  let sessionDir = "";
   let contextWindow = 0;
   let isActive = true;
   let previousActiveTools: string[] | null = null;
   let teamsSource = "generated default team";
 
-  function loadAgents(cwd: string) {
-    sessionDir = join(cwd, ".pi", "agent-sessions");
+  function loadAgents(ctx: ExtensionContext) {
+    const sessionId = ctx.sessionManager.getSessionId();
+    sessionDir = join(ctx.cwd, ".pi", "agent-sessions", sessionId);
     if (!existsSync(sessionDir)) {
       mkdirSync(sessionDir, { recursive: true });
     }
-    allAgentDefs = scanAgentDirs(cwd);
-    const teamsPath = findTeamsPath(cwd);
-    teamsSource = formatTeamsSource(cwd, teamsPath);
+    allAgentDefs = scanAgentDirs(ctx.cwd);
+    const teamsPath = findTeamsPath(ctx.cwd);
+    teamsSource = formatTeamsSource(ctx.cwd, teamsPath);
     if (teamsPath) {
       try {
         teams = parseTeamsYaml(readFileSync(teamsPath, "utf-8"));
@@ -282,12 +281,7 @@ export default function (pi: ExtensionAPI) {
       const def = defsByName.get(member.toLowerCase());
       if (!def) continue;
       const key = def.name.toLowerCase().replace(/\s+/g, "-");
-      // Get timestamp for filename: YYYYMMDD-HHMM
-      const now = new Date();
-      const datestamp = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,"0")}${String(now.getDate()).padStart(2,"0")}`;
-      const timestamp = `${String(now.getHours()).padStart(2,"0")}${String(now.getMinutes()).padStart(2,"0")}`;
-      const sessionFilename = `${key}-${datestamp}-${timestamp}.jsonl`;
-      const sessionFile = join(sessionDir, sessionFilename);
+      const sessionFile = join(sessionDir, `${key}.jsonl`);
       agentStates.set(def.name.toLowerCase(), {
         def,
         status: "idle",
@@ -530,7 +524,7 @@ export default function (pi: ExtensionAPI) {
     if (!ctx) return;
     widgetCtx = ctx;
     isActive = true;
-    loadAgents(ctx.cwd);
+    loadAgents(ctx);
     const teamNames = Object.keys(teams);
     if (teamNames.length > 0) {
       activateTeam(teams[activeTeamName] ? activeTeamName : teamNames[0]);
@@ -543,6 +537,24 @@ export default function (pi: ExtensionAPI) {
     updateWidget();
     setFooter(ctx);
   }
+
+  /** After main session switch/fork: new subagent directory without changing tool registration. */
+  function refreshAgentTeamSession(ctx: ExtensionContext) {
+    if (!isActive) return;
+    widgetCtx = ctx;
+    loadAgents(ctx);
+    const teamNames = Object.keys(teams);
+    if (teamNames.length > 0) {
+      activateTeam(teams[activeTeamName] ? activeTeamName : teamNames[0]);
+    } else {
+      activeTeamName = "";
+      agentStates.clear();
+    }
+    updateStatus(ctx);
+    updateWidget();
+    setFooter(ctx);
+  }
+
   function dispatchAgent(
     agentName: string,
     task: string,
@@ -1014,25 +1026,17 @@ ${agentCatalog}`,
     widgetCtx = _ctx;
     contextWindow = _ctx.model?.contextWindow || 0;
     isActive = true;
-    const sessDir = join(_ctx.cwd, ".pi", "agent-sessions");
-    if (existsSync(sessDir)) {
-      for (const f of readdirSync(sessDir)) {
-        if (f.endsWith(".json")) {
-          try {
-            unlinkSync(join(sessDir, f));
-          } catch {}
-        }
-      }
-    }
     previousActiveTools = pi.getActiveTools();
     enableAgentTeam(_ctx);
-    const members = Array.from(agentStates.values())
-      .map((s) => displayName(s.def.name))
-      .join(", ");
-    _ctx.ui.notify(
-        `Team sets loaded from: ${teamsSource}\n\n` +
-      "info",
-    );
+    _ctx.ui.notify(`Team sets loaded from: ${teamsSource}`, "info");
     updateWidget();
+  });
+
+  pi.on("session_switch", async (_event, ctx) => {
+    refreshAgentTeamSession(ctx);
+  });
+
+  pi.on("session_fork", async (_event, ctx) => {
+    refreshAgentTeamSession(ctx);
   });
 }
