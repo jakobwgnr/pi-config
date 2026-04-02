@@ -529,9 +529,11 @@ export default function (pi: ExtensionAPI) {
     const todos: any[] = agentTodosAll(cwd, sessionId);
     // First try: ALL assigned (any status) to this agent/session
     const assigned = todos.filter(t => t.assigned_to_session === sessionId);
-    if (assigned.length > 0) return assigned;
-    // Fallback: all open and *unassigned* todos (not closed)
-    return todos.filter(t => !t.assigned_to_session && !["closed", "done", "completed"].includes((t.status||"").toLowerCase()));
+    // Only show incomplete todos assigned to the session/agent
+    const assignedIncomplete = assigned.filter(t => normalizeTodoStatus(t.status) !== "completed");
+    if (assignedIncomplete.length > 0) return assignedIncomplete;
+    // Fallback: no open, unassigned todos should be shown
+    return [];
   }
   function todoStats(todos: any[]): { completed: number, total: number } {
     const total = todos.length;
@@ -627,11 +629,13 @@ export default function (pi: ExtensionAPI) {
 
     // ---- Contextual todos snippet ----
     if (tstats.total > 0) {
-      lines.push(border(theme.fg("dim", "─".repeat(Math.max(2,w-2))), w));
-      const shown = contextualTodos(todos);
-      for (const todo of shown) {
-        const tline = renderAgentTodo(theme, todo, w-3);
-        lines.push(border("   " + tline, 3 + tline.length));
+      // Only show todos if there are active/incomplete todos
+      if (todos.some(t => normalizeTodoStatus(t.status) !== "completed")) {
+        lines.push(border(theme.fg("dim", "─".repeat(w)), w)); // Ensure the line fills the card width
+        for (const todo of todos.filter(t => normalizeTodoStatus(t.status) !== "completed")) {
+          const tline = renderAgentTodo(theme, todo, w-3);
+          lines.push(border("   " + tline, 3 + tline.length));
+        }
       }
     }
 
