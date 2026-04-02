@@ -2,6 +2,7 @@
 name: data-mapping-specialist
 description: Investigates and shapes ADAMMS data mapping rules for migration projects
 tools: read, bash, write
+extensions: answer, execute-command
 model: gpt-5.4
 thinking: medium
 skill: adamms

@@ -2,6 +2,7 @@
 name: researcher
 description: Deep research using parallel.ai tools as primary, Claude Code as fallback for code analysis
 tools: read, bash, write
+extensions: answer, execute-command
 model: gpt-5.4
 ---
 

@@ -2,6 +2,7 @@
 name: etl-designer
 description: Designs ETL implementation plans from ADAMMS mapping rules and validates mapping readiness before etl-developer execution
 tools: read, bash, write
+extensions: answer, execute-command
 model: gpt-5.4
 thinking: medium
 skill: adamms

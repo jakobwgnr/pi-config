@@ -2,6 +2,7 @@
 name: target-system-specialist
 description: Analyzes and shapes target system data structures, entities, relationships, and migration-ready constraints in data migration projects
 tools: read, bash, write
+extensions: answer, execute-command
 model: gpt-5.4
 thinking: medium
 system-prompt: |

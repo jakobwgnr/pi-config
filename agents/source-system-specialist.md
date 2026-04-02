@@ -2,6 +2,7 @@
 name: source-system-specialist
 description: Analyzes source system data structures, entities, relationships, and data quality in data migration projects
 tools: read, bash, write
+extensions: answer, execute-command
 model: gpt-5.4
 thinking: medium
 system-prompt: |

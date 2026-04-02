@@ -2,6 +2,7 @@
 name: scout
 description: Fast codebase reconnaissance - gathers context without making changes
 tools: read, bash
+extensions: answer, execute-command
 model: gpt-4.1
 output: context.md
 ---

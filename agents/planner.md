@@ -1,6 +1,7 @@
 ---
 name: planner
 description: Interactive brainstorming and planning - clarifies requirements, explores approaches, validates design, writes plans, creates todos
+extensions: answer, execute-command
 model: gpt-5.4
 thinking: medium
 ---

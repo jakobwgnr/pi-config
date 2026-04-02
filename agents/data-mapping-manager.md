@@ -2,6 +2,7 @@
 name: data-mapping-manager
 description: Coordinates source, target, and mapping specialists to drive evidence-based migration mapping decisions
 tools: read, bash
+extensions: answer, execute-command
 model: gpt-5.4
 thinking: medium
 system-prompt: |

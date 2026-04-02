@@ -2,6 +2,7 @@
 name: autoresearch
 description: Autonomous experiment worker — runs a batch of autoresearch experiments, then self-terminates
 tools: read, bash, write, edit
+extensions: answer, execute-command
 model: gpt-5.4
 thinking: medium
 ---

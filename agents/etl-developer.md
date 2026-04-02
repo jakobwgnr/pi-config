@@ -2,6 +2,7 @@
 name: etl-developer
 description: Implements ETL processes from approved mapping definitions, especially for migration projects and Rogue-based ETL repositories
 tools: read, bash, write, edit
+extensions: answer, execute-command
 model: gpt-5.4
 thinking: medium
 skill: rogue

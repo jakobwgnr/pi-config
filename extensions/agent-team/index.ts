@@ -38,6 +38,8 @@ interface AgentDef {
   description: string;
   model: string;
   tools: string;
+  /** Pi extensions loaded in the subagent via `-e` (slugs under project `extensions/`). */
+  extensionSlugs: string[];
   systemPrompt: string;
   customSystemPrompt: string;
   systemPromptType: SystemPromptType;
@@ -145,6 +147,47 @@ function parseSystemPromptType(value?: string): SystemPromptType {
   return value === "append" ? "append" : "replace";
 }
 
+function isSafeExtensionSlug(slug: string): boolean {
+  const t = slug.trim();
+  if (!t) return false;
+  if (t.includes("..") || t.includes("/") || t.includes("\\")) return false;
+  return true;
+}
+
+/** Comma-separated slugs from agent frontmatter `extensions:` */
+function parseExtensionSlugs(raw: string | undefined): string[] {
+  if (!raw?.trim()) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const part of raw.split(",")) {
+    const slug = part.trim();
+    if (!isSafeExtensionSlug(slug)) continue;
+    const key = slug.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(slug);
+  }
+  return out;
+}
+
+/** Build `-e` argv pairs for `extensions/<slug>/index.ts` under cwd; report missing slugs. */
+function resolveSubagentExtensionArgs(
+  cwd: string,
+  slugs: string[],
+): { argv: string[]; missing: string[] } {
+  const argv: string[] = [];
+  const missing: string[] = [];
+  for (const slug of slugs) {
+    const absPath = resolve(cwd, "extensions", slug, "index.ts");
+    if (existsSync(absPath)) {
+      argv.push("-e", absPath);
+    } else {
+      missing.push(slug);
+    }
+  }
+  return { argv, missing };
+}
+
 function buildAgentSystemPrompt(
   def: Pick<AgentDef, "customSystemPrompt" | "systemPrompt">,
 ): string {
@@ -167,6 +210,7 @@ function parseAgentFile(filePath: string): AgentDef | null {
       description: frontmatter.description || "",
       model: (frontmatter.model || "").trim(),
       tools: frontmatter.tools || "read,grep,find,ls",
+      extensionSlugs: parseExtensionSlugs(frontmatter.extensions),
       systemPrompt: match[2].trim(),
       customSystemPrompt: (frontmatter["system-prompt"] || "").trim(),
       systemPromptType: parseSystemPromptType(
@@ -375,11 +419,22 @@ export default function (pi: ExtensionAPI) {
     );
     const task = truncateLine(state.task || "Waiting for work", contentWidth);
     const tools = truncateLine(`Tools: ${state.def.tools}`, contentWidth);
+    const extSlugs = state.def.extensionSlugs;
+    const extensions =
+      extSlugs.length > 0
+        ? truncateLine(`Extensions: ${extSlugs.join(", ")}`, contentWidth)
+        : null;
     const runs = truncateLine(
       `Runs: ${state.runCount} · Session: ${state.sessionFile ? "resume" : "new"}`,
       contentWidth,
     );
-    const detailLines = [`Role: ${description}`, `Task: ${task}`, tools, runs];
+    const detailLines = [
+      `Role: ${description}`,
+      `Task: ${task}`,
+      tools,
+      ...(extensions ? [extensions] : []),
+      runs,
+    ];
     return detailLines.flatMap((line) => wrapText(line, contentWidth, 2));
   }
   function renderCard(
@@ -608,11 +663,20 @@ export default function (pi: ExtensionAPI) {
     const agentKey = state.def.name.toLowerCase().replace(/\s+/g, "-");
     const agentSessionFile = join(sessionDir, `${agentKey}.jsonl`);
     const agentSystemPrompt = buildAgentSystemPrompt(state.def);
+    const { argv: extensionArgv, missing: missingExtensionSlugs } =
+      resolveSubagentExtensionArgs(ctx.cwd, state.def.extensionSlugs);
+    if (missingExtensionSlugs.length > 0 && ctx.hasUI) {
+      ctx.ui.notify(
+        `${displayName(state.def.name)}: missing extension folder(s): ${missingExtensionSlugs.join(", ")} (expected extensions/<slug>/index.ts)`,
+        "warning",
+      );
+    }
     const args = [
       "--mode",
       "json",
       "-p",
       "--no-extensions",
+      ...extensionArgv,
       "--model",
       model,
       "--tools",
@@ -982,10 +1046,13 @@ export default function (pi: ExtensionAPI) {
   pi.on("before_agent_start", async (_event, _ctx) => {
     if (!isActive) return;
     const agentCatalog = Array.from(agentStates.values())
-      .map(
-        (s) =>
-          `### ${displayName(s.def.name)}\n**Dispatch as:** \`${s.def.name}\`\n${s.def.description}\n**Tools:** ${s.def.tools}`,
-      )
+      .map((s) => {
+        const ext =
+          s.def.extensionSlugs.length > 0
+            ? `\n**Extensions:** ${s.def.extensionSlugs.join(", ")}`
+            : "";
+        return `### ${displayName(s.def.name)}\n**Dispatch as:** \`${s.def.name}\`\n${s.def.description}\n**Tools:** ${s.def.tools}${ext}`;
+      })
       .join("\n\n");
     const teamMembers = Array.from(agentStates.values())
       .map((s) => displayName(s.def.name))
