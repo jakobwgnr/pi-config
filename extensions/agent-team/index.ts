@@ -309,9 +309,32 @@ export default function (pi: ExtensionAPI) {
   }
   function wrapText(text: string, width: number, maxLines: number): string[] {
     if (width <= 0 || maxLines <= 0) return [];
-    // --- Patch: Only single-line with ellipsis for display/truncate fields ---
-    // This keeps display fields to a single line and truncates with ellipsis if wrapped.
-    return [truncateLine(text.replace(/\s+/g, " ").trim(), width)];
+    const words = text.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+    if (words.length === 0) return [""];
+    const lines: string[] = [];
+    let current = "";
+    for (const word of words) {
+      if (!current) {
+        current = word.length > width ? truncateLine(word, width) : word;
+        continue;
+      }
+      if (`${current} ${word}`.length <= width) {
+        current += ` ${word}`;
+        continue;
+      }
+      lines.push(current);
+      if (lines.length === maxLines) {
+        return lines;
+      }
+      current = word.length > width ? truncateLine(word, width) : word;
+    }
+    if (lines.length < maxLines && current) {
+      lines.push(current);
+    }
+    if (lines.length > maxLines) {
+      return lines.slice(0, maxLines);
+    }
+    return lines;
   }
   function getStatusColor(status: AgentState["status"]): string {
     return status === "idle"
@@ -349,8 +372,7 @@ export default function (pi: ExtensionAPI) {
         : state.lastWork || "No recent output",
       contentWidth,
     );
-    // REMOVE MODEL FROM DETAILS (Requirement 1)
-    // const model = truncateLine(`Model: ${state.def.model || "session default"}`, contentWidth);
+    const model = truncateLine(`Model: ${state.def.model || "session default"}`, contentWidth);
     const tools = truncateLine(`Tools: ${state.def.tools}`, contentWidth);
     const runs = truncateLine(
       `Runs: ${state.runCount} · Session: ${state.sessionFile ? "resume" : "new"}`,
@@ -360,15 +382,14 @@ export default function (pi: ExtensionAPI) {
       `Role: ${description}`,
       `Task: ${task}`,
       `Doing: ${currentWork}`,
-      // model (REMOVED)
+      model,
       tools,
       runs,
     ];
-    // (Requirement 2) ONLY show custom system prompt status ONCE in the details—not again in card render
     if (state.def.customSystemPrompt) {
       detailLines.push("Custom system prompt configured ✓");
     }
-    return detailLines.flatMap((line) => wrapText(line, contentWidth, 1));
+    return detailLines.flatMap((line) => wrapText(line, contentWidth, 2));
   }
   function renderCard(
     state: AgentState,
@@ -388,7 +409,6 @@ export default function (pi: ExtensionAPI) {
       " ".repeat(Math.max(0, w - visibleLength)) +
       theme.fg(sideBorderColor, "│");
     const lines = [theme.fg(topBorderColor, top)];
-    // Model in header only (Requirement 1)
     const modelSuffix = state.def.model ? ` [${state.def.model}]` : "";
     const nameText = truncateToWidth(displayName(state.def.name) + modelSuffix, Math.max(1, w - 1));
     const headerContent = theme.fg("accent", theme.bold(nameText));
@@ -409,7 +429,10 @@ export default function (pi: ExtensionAPI) {
     for (const detail of getAgentDetailLines(state, w - 1)) {
       lines.push(border(" " + theme.fg("muted", detail), 1 + detail.length));
     }
-    // (Requirement 2) Do NOT show custom system prompt status a second time here
+    if (state.def.customSystemPrompt) {
+      const promptText = truncateLine("Custom system prompt ✓", w - 1);
+      lines.push(border(" " + theme.fg("success", promptText), 1 + promptText.length));
+    }
     lines.push(theme.fg(topBorderColor, bot));
     return lines;
   }
@@ -515,5 +538,479 @@ export default function (pi: ExtensionAPI) {
     updateWidget();
     setFooter(ctx);
   }
-  // ... rest of file is unchanged and not UI related ...
+  function dispatchAgent(
+    agentName: string,
+    task: string,
+    ctx: any,
+  ): Promise<{ output: string; exitCode: number; elapsed: number }> {
+    if (!isActive) {
+      return Promise.resolve({
+        output:
+          "Agent team is deactivated. dispatch_agent is unavailable for this session.",
+        exitCode: 1,
+        elapsed: 0,
+      });
+    }
+    const key = agentName.toLowerCase();
+    const state = agentStates.get(key);
+    if (!state) {
+      return Promise.resolve({
+        output: `Agent \"${agentName}\" not found. Available: ${Array.from(agentStates.values()).map((s) => displayName(s.def.name)).join(", ")}`,
+        exitCode: 1,
+        elapsed: 0,
+      });
+    }
+    if (state.status === "running") {
+      return Promise.resolve({
+        output: `Agent \"${displayName(state.def.name)}\" is already running. Wait for it to finish.`,
+        exitCode: 1,
+        elapsed: 0,
+      });
+    }
+    state.status = "running";
+    state.task = task;
+    state.toolCount = 0;
+    state.elapsed = 0;
+    state.lastWork = "";
+    state.runCount++;
+    updateWidget();
+    const startTime = Date.now();
+    state.timer = setInterval(() => {
+      state.elapsed = Date.now() - startTime;
+      updateWidget();
+    }, 1000);
+    const model = state.def.model || (ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : "openrouter/google/gemini-3-flash-preview");
+    const agentKey = state.def.name.toLowerCase().replace(/\s+/g, "-");
+    const agentSessionFile = join(sessionDir, `${agentKey}.json`);
+    const agentSystemPrompt = buildAgentSystemPrompt(state.def);
+    const args = [
+      "--mode",
+      "json",
+      "-p",
+      "--no-extensions",
+      "--model",
+      model,
+      "--tools",
+      state.def.tools,
+      "--thinking",
+      "off",
+      state.def.systemPromptType === "append"
+        ? "--append-system-prompt"
+        : "--system-prompt",
+      agentSystemPrompt,
+      "--session",
+      agentSessionFile,
+    ];
+    if (state.sessionFile) {
+      args.push("-c");
+    }
+    args.push(task);
+    const textChunks: string[] = [];
+    return new Promise((resolve) => {
+      const proc = spawn("pi", args, {
+        stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env },
+      });
+      let buffer = "";
+      proc.stdout!.setEncoding("utf-8");
+      proc.stdout!.on("data", (chunk: string) => {
+        buffer += chunk;
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const event = JSON.parse(line);
+            if (event.type === "message_update") {
+              const delta = event.assistantMessageEvent;
+              if (delta?.type === "text_delta") {
+                textChunks.push(delta.delta || "");
+                const full = textChunks.join("");
+                const last = full.split("\n").filter((l: string) => l.trim()).pop() || "";
+                state.lastWork = last;
+                updateWidget();
+              }
+            } else if (event.type === "tool_execution_start") {
+              state.toolCount++;
+              updateWidget();
+            } else if (event.type === "message_end") {
+              const msg = event.message;
+              if (msg?.usage && contextWindow > 0) {
+                state.contextPct = ((msg.usage.input || 0) / contextWindow) * 100;
+                updateWidget();
+              }
+            } else if (event.type === "agent_end") {
+              const msgs = event.messages || [];
+              const last = [...msgs].reverse().find((m: any) => m.role === "assistant");
+              if (last?.usage && contextWindow > 0) {
+                state.contextPct = ((last.usage.input || 0) / contextWindow) * 100;
+                updateWidget();
+              }
+            }
+          } catch {}
+        }
+      });
+      proc.stderr!.setEncoding("utf-8");
+      proc.stderr!.on("data", () => {});
+      proc.on("close", (code) => {
+        if (buffer.trim()) {
+          try {
+            const event = JSON.parse(buffer);
+            if (event.type === "message_update") {
+              const delta = event.assistantMessageEvent;
+              if (delta?.type === "text_delta")
+                textChunks.push(delta.delta || "");
+            }
+          } catch {}
+        }
+        clearInterval(state.timer);
+        state.elapsed = Date.now() - startTime;
+        state.status = isActive ? (code === 0 ? "done" : "error") : "disabled";
+        if (code === 0) {
+          state.sessionFile = agentSessionFile;
+        }
+        const full = textChunks.join("");
+        state.lastWork = full.split("\n").filter((l: string) => l.trim()).pop() || "";
+        updateWidget();
+        if (!isActive) {
+          clearWidgetAndFooter(ctx);
+          updateStatus(ctx);
+        }
+        ctx.ui.notify(`${displayName(state.def.name)} ${state.status} in ${Math.round(state.elapsed / 1000)}s`, state.status === "done" ? "success" : "error");
+        resolve({
+          output: full,
+          exitCode: code ?? 1,
+          elapsed: state.elapsed,
+        });
+      });
+      proc.on("error", (err) => {
+        clearInterval(state.timer);
+        state.status = isActive ? "error" : "disabled";
+        state.lastWork = `Error: ${err.message}`;
+        updateWidget();
+        if (!isActive) {
+          clearWidgetAndFooter(ctx);
+          updateStatus(ctx);
+        }
+        resolve({
+          output: `Error spawning agent: ${err.message}`,
+          exitCode: 1,
+          elapsed: Date.now() - startTime,
+        });
+      });
+    });
+  }
+  pi.registerTool({
+    name: "dispatch_agent",
+    label: "Dispatch Agent",
+    description:
+      "Dispatch a task to a specialist agent. The agent will execute the task and return the result. Use the system prompt to see available agent names.",
+    parameters: Type.Object({
+      agent: Type.String({ description: "Agent name (case-insensitive)" }),
+      task: Type.String({
+        description: "Task description for the agent to execute",
+      }),
+    }),
+    async execute(_toolCallId, params, _signal, onUpdate, ctx) {
+      const { agent, task } = params as { agent: string; task: string };
+      try {
+        if (!isActive) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Agent team is deactivated. dispatch_agent is unavailable for this session.",
+              },
+            ],
+            details: {
+              agent,
+              task,
+              status: "error",
+              elapsed: 0,
+              exitCode: 1,
+              fullOutput: "",
+            },
+          };
+        }
+        if (onUpdate) {
+          onUpdate({
+            content: [{ type: "text", text: `Dispatching to ${agent}...` }],
+            details: { agent, task, status: "dispatching" },
+          });
+        }
+        const result = await dispatchAgent(agent, task, ctx);
+        const truncated =
+          result.output.length > 8000
+            ? result.output.slice(0, 8000) + "\n\n... [truncated]"
+            : result.output;
+        const status = result.exitCode === 0 ? "done" : "error";
+        const summary = `[${agent}] ${status} in ${Math.round(result.elapsed / 1000)}s`;
+        return {
+          content: [{ type: "text", text: `${summary}\n\n${truncated}` }],
+          details: {
+            agent,
+            task,
+            status,
+            elapsed: result.elapsed,
+            exitCode: result.exitCode,
+            fullOutput: result.output,
+          },
+        };
+      } catch (err: any) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error dispatching to ${agent}: ${err?.message || err}`,
+            },
+          ],
+          details: {
+            agent,
+            task,
+            status: "error",
+            elapsed: 0,
+            exitCode: 1,
+            fullOutput: "",
+          },
+        };
+      }
+    },
+    renderCall(args, theme) {
+      const agentName = (args as any).agent || "?";
+      const task = (args as any).task || "";
+      const preview = task.length > 60 ? task.slice(0, 57) + "..." : task;
+      return new Text(
+        theme.fg("toolTitle", theme.bold("dispatch_agent ")) +
+          theme.fg("accent", agentName) +
+          theme.fg("dim", " — ") +
+          theme.fg("muted", preview),
+        0,
+        0,
+      );
+    },
+    renderResult(result, options, theme) {
+      const details = result.details as any;
+      if (!details) {
+        const text = result.content[0];
+        return new Text(text?.type === "text" ? text.text : "", 0, 0);
+      }
+      if (options.isPartial || details.status === "dispatching") {
+        return new Text(
+          theme.fg("accent", `● ${details.agent || "?"}`) +
+            theme.fg("dim", " working..."),
+          0,
+          0,
+        );
+      }
+      const icon = details.status === "done" ? "✓" : "✗";
+      const color = details.status === "done" ? "success" : "error";
+      const elapsed =
+        typeof details.elapsed === "number"
+          ? Math.round(details.elapsed / 1000)
+          : 0;
+      const header =
+        theme.fg(color, `${icon} ${details.agent}`) +
+        theme.fg("dim", ` ${elapsed}s`);
+      if (options.expanded && details.fullOutput) {
+        const output =
+          details.fullOutput.length > 4000
+            ? details.fullOutput.slice(0, 4000) + "\n... [truncated]"
+            : details.fullOutput;
+        return new Text(header + "\n" + theme.fg("muted", output), 0, 0);
+      }
+      return new Text(header, 0, 0);
+    },
+  });
+  pi.registerCommand("agents-team", {
+    description: "Select a team to work with",
+    handler: async (_args, ctx) => {
+      widgetCtx = ctx;
+      if (!isActive) {
+        return "Agent team is deactivated for this session.";
+      }
+      const teamNames = Object.keys(teams);
+      if (teamNames.length === 0) {
+        ctx.ui.notify(
+          "No teams defined in .pi/agents/teams.yaml or ~/.pi/agent/agents/teams.yaml",
+          "warning",
+        );
+        return;
+      }
+      const options = teamNames.map((name) => {
+        const members = teams[name].map((m) => displayName(m));
+        return `${name} — ${members.join(", ")}`;
+      });
+      const choice = await ctx.ui.select("Select Team", options);
+      if (choice === undefined) return;
+      const idx = options.indexOf(choice);
+      const name = teamNames[idx];
+      activateTeam(name);
+      updateWidget();
+      updateStatus(ctx);
+      ctx.ui.notify(
+        `Team: ${name} — ${Array.from(agentStates.values())
+          .map((s) => displayName(s.def.name))
+          .join(", ")}`,
+        "info",
+      );
+    },
+  });
+  pi.registerCommand("agents-list", {
+    description: "List all loaded agents",
+    handler: async (_args, _ctx) => {
+      widgetCtx = _ctx;
+      if (!isActive) {
+        return "Agent team is deactivated for this session.";
+      }
+      const names = Array.from(agentStates.values())
+        .map((s) => {
+          const session = s.sessionFile ? "resumed" : "new";
+          return `${displayName(s.def.name)} (${s.status}, ${session}, runs: ${s.runCount}): ${s.def.description}`;
+        })
+        .join("\n");
+      _ctx.ui.notify(names || "No agents loaded", "info");
+    },
+  });
+  pi.registerCommand("agents-grid", {
+    description: "Set grid columns: /agents-grid <1-6>",
+    getArgumentCompletions: (prefix: string): AutocompleteItem[] | null => {
+      const items = ["1", "2", "3", "4", "5", "6"].map((n) => ({
+        value: n,
+        label: `${n} columns`,
+      }));
+      const filtered = items.filter((i) => i.value.startsWith(prefix));
+      return filtered.length > 0 ? filtered : items;
+    },
+    handler: async (args, _ctx) => {
+      widgetCtx = _ctx;
+      if (!isActive) {
+        return "Agent team is deactivated for this session.";
+      }
+      const n = parseInt(args?.trim() || "", 10);
+      if (n >= 1 && n <= 6) {
+        gridCols = n;
+        _ctx.ui.notify(`Grid set to ${gridCols} columns`, "info");
+        updateWidget();
+      } else {
+        _ctx.ui.notify("Usage: /agents-grid <1-6>", "error");
+      }
+    },
+  });
+  pi.registerCommand("agents-team:deactivate", {
+    description: "Deactivate agent-team for the current session",
+    handler: async (_args, ctx) => {
+      widgetCtx = ctx;
+      isActive = false;
+      for (const state of agentStates.values()) {
+        if (state.timer) {
+          clearInterval(state.timer);
+          state.timer = undefined;
+        }
+        state.status = "disabled";
+      }
+      const restoredTools =
+        previousActiveTools && previousActiveTools.length > 0
+          ? previousActiveTools
+          : pi.getAllTools().map((t) => t.name);
+      pi.setActiveTools(restoredTools);
+      clearWidgetAndFooter(ctx);
+      updateStatus(ctx);
+      ctx.ui.notify("Agent team deactivated for this session", "info");
+      return "Agent team deactivated for this session.";
+    },
+  });
+  pi.registerCommand("agents-team:activate", {
+    description: "Activate agent-team for the current session",
+    handler: async (_args, ctx) => {
+      widgetCtx = ctx;
+      if (isActive) {
+        return "Agent team is already active for this session.";
+      }
+      enableAgentTeam(ctx);
+      const members = Array.from(agentStates.values())
+        .map((s) => displayName(s.def.name))
+        .join(", ");
+      ctx.ui.notify(
+        `Agent team activated for this session\n` +
+          `Team: ${activeTeamName} (${members})\n` +
+          `Team sets loaded from: ${teamsSource}`,
+        "info",
+      );
+      return "Agent team activated for this session.";
+    },
+  });
+  pi.on("before_agent_start", async (_event, _ctx) => {
+    if (!isActive) return;
+    const agentCatalog = Array.from(agentStates.values())
+      .map(
+        (s) =>
+          `### ${displayName(s.def.name)}\n**Dispatch as:** \`${s.def.name}\`\n${s.def.description}\n**Tools:** ${s.def.tools}`,
+      )
+      .join("\n\n");
+    const teamMembers = Array.from(agentStates.values())
+      .map((s) => displayName(s.def.name))
+      .join(", ");
+    return {
+      systemPrompt: `You are a dispatcher agent. You coordinate specialist agents to accomplish tasks.
+You do NOT have direct access to the codebase. You MUST delegate all work through
+agents using the dispatch_agent tool.
+
+## Active Team: ${activeTeamName}
+Members: ${teamMembers}
+You can ONLY dispatch to agents listed below. Do not attempt to dispatch to agents outside this team.
+
+## How to Work
+- Analyze the user's request and break it into clear sub-tasks
+- Choose the right agent(s) for each sub-task
+- Dispatch tasks using the dispatch_agent tool
+- Review results and dispatch follow-up agents if needed
+- If a task fails, try a different agent or adjust the task description
+- Summarize the outcome for the user
+
+## Rules
+- NEVER try to read, write, or execute code directly — you have no such tools
+- ALWAYS use dispatch_agent to get work done
+- You can chain agents: use scout to explore, then builder to implement
+- You can dispatch the same agent multiple times with different tasks
+- Keep tasks focused — one clear objective per dispatch
+
+## Agents
+
+${agentCatalog}`,
+    };
+  });
+  pi.on("session_start", async (_event, _ctx) => {
+    if (widgetCtx) {
+      widgetCtx.ui.setWidget("agent-team", undefined);
+    }
+    widgetCtx = _ctx;
+    contextWindow = _ctx.model?.contextWindow || 0;
+    isActive = true;
+    const sessDir = join(_ctx.cwd, ".pi", "agent-sessions");
+    if (existsSync(sessDir)) {
+      for (const f of readdirSync(sessDir)) {
+        if (f.endsWith(".json")) {
+          try {
+            unlinkSync(join(sessDir, f));
+          } catch {}
+        }
+      }
+    }
+    previousActiveTools = pi.getActiveTools();
+    enableAgentTeam(_ctx);
+    const members = Array.from(agentStates.values())
+      .map((s) => displayName(s.def.name))
+      .join(", ");
+    _ctx.ui.notify(
+      `Team: ${activeTeamName} (${members})\n` +
+        `Team sets loaded from: ${teamsSource}\n\n` +
+        "/agents-team          Select a team\n" +
+        "/agents-team:activate Activate agent-team for this session\n" +
+        "/agents-team:deactivate Disable agent-team for this session\n" +
+        "/agents-list          List active agents and status\n" +
+        "/agents-grid <1-6>    Set grid column count",
+      "info",
+    );
+    updateWidget();
+  });
 }
