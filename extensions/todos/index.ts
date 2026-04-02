@@ -575,7 +575,7 @@ class TodoDetailOverlayComponent {
 	}
 
 	handleInput(keyData: string): void {
-		const kb = getEditorKeybindings();
+		const kb = getKeybindings();
 		if (kb.matches(keyData, "selectCancel")) {
 			this.onAction("back");
 			return;
