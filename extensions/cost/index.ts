@@ -22,7 +22,7 @@ function extractCosts(filePath: string): CostEntry[] {
           entry.message?.role === "assistant" &&
           entry.message?.usage?.cost?.total
         ) {
-          const date = path.basename(filePath).slice(0, 10);
+          const date = fileSessionDay(filePath);
           entries.push({
             cost: entry.message.usage.cost.total,
             model: entry.message.model ?? "unknown",
@@ -57,6 +57,19 @@ function getCutoffDate(days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** YYYY-MM-DD from filename prefix, or file mtime for names like agent-team's `scout.jsonl`. */
+function fileSessionDay(filePath: string): string {
+  const basename = path.basename(filePath);
+  if (/^\d{4}-\d{2}-\d{2}/.test(basename)) {
+    return basename.slice(0, 10);
+  }
+  try {
+    return fs.statSync(filePath).mtime.toISOString().slice(0, 10);
+  } catch {
+    return basename.slice(0, 10);
+  }
+}
+
 function formatCost(n: number): string {
   return `$${n.toFixed(2)}`;
 }
@@ -73,7 +86,7 @@ export default function (pi: ExtensionAPI) {
 
       const cutoff = getCutoffDate(days);
       const sessionsDir = path.join(os.homedir(), ".pi", "agent", "sessions");
-      const subagentDir = process.env.TMPDIR ?? "/.pi/agent-sessions";
+      const subagentDir = path.join(ctx.cwd, ".pi", "agent-sessions");
 
       // Collect main sessions
       const mainFiles = findJsonlFiles(sessionsDir);
@@ -93,9 +106,7 @@ export default function (pi: ExtensionAPI) {
         filePath: string,
         isSubagent: boolean
       ) => {
-        const basename = path.basename(filePath);
-        const datePart = basename.slice(0, 10);
-        if (datePart < cutoff) return;
+        if (fileSessionDay(filePath) < cutoff) return;
 
         const entries = extractCosts(filePath);
         if (entries.length === 0) return;

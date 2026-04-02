@@ -243,7 +243,6 @@ export default function (pi: ExtensionAPI) {
   let activeTeamName = "";
   let gridCols = 2;
   let widgetCtx: any;
-  // Store all team-agent session files in ~/.pi/agent/sessions
   let sessionDir = join(homedir(), ".pi", "agent", "sessions");
   let contextWindow = 0;
   let isActive = true;
