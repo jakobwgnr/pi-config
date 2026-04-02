@@ -6,5 +6,8 @@
   "author": "jakobwgnr",
   "keywords": [
     "pi-package"
-  ]
+  ],
+  "devDependencies": {
+    "@mariozechner/pi-tui": "^0.64.0"
+  }
 }
