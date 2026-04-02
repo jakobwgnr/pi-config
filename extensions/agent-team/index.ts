@@ -10,11 +10,6 @@
  * Teams are defined in .pi/agents/teams.yaml — on boot a select dialog lets
  * you pick which team to work with. Only team members are available for dispatch.
  *
- * Commands:
- *   /agents-team          — switch active team
- *   /agents-list          — list loaded agents
- *   /agents-grid N        — set column count (default 2)
- *
  * Usage: pi -e extensions/agent-team.ts
  */
 
@@ -96,7 +91,9 @@ function parseTeamsYaml(raw: string): Record<string, string[]> {
 
 // ── Frontmatter Parser ───────────────────────────
 
-function parseSimpleYamlFrontmatter(raw: string): Record<string, string> | null {
+function parseSimpleYamlFrontmatter(
+  raw: string,
+): Record<string, string> | null {
   const result: Record<string, string> = {};
   const lines = raw.replace(/\r\n/g, "\n").split("\n");
 
@@ -151,7 +148,9 @@ function parseSystemPromptType(value?: string): SystemPromptType {
   return value === "append" ? "append" : "replace";
 }
 
-function buildAgentSystemPrompt(def: Pick<AgentDef, "customSystemPrompt" | "systemPrompt">): string {
+function buildAgentSystemPrompt(
+  def: Pick<AgentDef, "customSystemPrompt" | "systemPrompt">,
+): string {
   return [def.customSystemPrompt, def.systemPrompt]
     .filter((part) => part.trim().length > 0)
     .join("\n\n");
@@ -173,7 +172,9 @@ function parseAgentFile(filePath: string): AgentDef | null {
       tools: frontmatter.tools || "read,grep,find,ls",
       systemPrompt: match[2].trim(),
       customSystemPrompt: (frontmatter["system-prompt"] || "").trim(),
-      systemPromptType: parseSystemPromptType(frontmatter["system-prompt-type"]),
+      systemPromptType: parseSystemPromptType(
+        frontmatter["system-prompt-type"],
+      ),
       file: filePath,
     };
   } catch {
@@ -273,7 +274,9 @@ export default function (pi: ExtensionAPI) {
   function activateTeam(teamName: string) {
     activeTeamName = teamName;
     const members = teams[teamName] || [];
-    const defsByName = new Map(allAgentDefs.map((d) => [d.name.toLowerCase(), d]));
+    const defsByName = new Map(
+      allAgentDefs.map((d) => [d.name.toLowerCase(), d]),
+    );
     agentStates.clear();
     for (const member of members) {
       const def = defsByName.get(member.toLowerCase());
@@ -363,20 +366,21 @@ export default function (pi: ExtensionAPI) {
     const bar = "#".repeat(filled) + "-".repeat(5 - filled);
     return `[${bar}] ${Math.ceil(state.contextPct)}%`;
   }
-  function getAgentDetailLines(state: AgentState, contentWidth: number): string[] {
-    const description = truncateLine(state.def.description || "No description", contentWidth);
+  function getAgentDetailLines(
+    state: AgentState,
+    contentWidth: number,
+  ): string[] {
+    const description = truncateLine(
+      state.def.description || "No description",
+      contentWidth,
+    );
     const task = truncateLine(state.task || "Waiting for work", contentWidth);
     const tools = truncateLine(`Tools: ${state.def.tools}`, contentWidth);
     const runs = truncateLine(
       `Runs: ${state.runCount} · Session: ${state.sessionFile ? "resume" : "new"}`,
       contentWidth,
     );
-    const detailLines = [
-      `Role: ${description}`,
-      `Task: ${task}`,
-      tools,
-      runs,
-    ];
+    const detailLines = [`Role: ${description}`, `Task: ${task}`, tools, runs];
     return detailLines.flatMap((line) => wrapText(line, contentWidth, 2));
   }
   function renderCard(
@@ -398,28 +402,38 @@ export default function (pi: ExtensionAPI) {
       theme.fg(sideBorderColor, "│");
     const lines = [theme.fg(topBorderColor, top)];
     const modelSuffix = state.def.model ? ` [${state.def.model}]` : "";
-    const nameText = truncateToWidth(displayName(state.def.name) + modelSuffix, Math.max(1, w - 1));
+    const nameText = truncateToWidth(
+      displayName(state.def.name) + modelSuffix,
+      Math.max(1, w - 1),
+    );
     const headerContent = theme.fg("accent", theme.bold(nameText));
     lines.push(border(" " + headerContent, 1 + visibleWidth(headerContent)));
     const statusStr = `${statusIcon} ${state.status}${state.status !== "idle" ? ` ${Math.round(state.elapsed / 1000)}s` : ""}`;
     const statusText = truncateLine(statusStr, w - 1);
-    lines.push(border(" " + theme.fg(statusColor, statusText), 1 + statusText.length));
+    lines.push(
+      border(" " + theme.fg(statusColor, statusText), 1 + statusText.length),
+    );
     const ctxStr = getContextBar(state);
     lines.push(border(" " + theme.fg("dim", ctxStr), 1 + ctxStr.length));
     const summaryLabel = state.status === "running" ? "Doing" : "Summary";
-    const summaryRaw = state.status === "running"
-      ? state.lastWork || state.task || "Working..."
-      : state.task
-        ? state.lastWork || state.task
-        : state.def.description;
+    const summaryRaw =
+      state.status === "running"
+        ? state.lastWork || state.task || "Working..."
+        : state.task
+          ? state.lastWork || state.task
+          : state.def.description;
     const summaryLine = truncateLine(`${summaryLabel}: ${summaryRaw}`, w - 1);
-    lines.push(border(" " + theme.fg("muted", summaryLine), 1 + summaryLine.length));
+    lines.push(
+      border(" " + theme.fg("muted", summaryLine), 1 + summaryLine.length),
+    );
     for (const detail of getAgentDetailLines(state, w - 1)) {
       lines.push(border(" " + theme.fg("muted", detail), 1 + detail.length));
     }
     if (state.def.customSystemPrompt) {
       const promptText = truncateLine("Custom system prompt ✓", w - 1);
-      lines.push(border(" " + theme.fg("success", promptText), 1 + promptText.length));
+      lines.push(
+        border(" " + theme.fg("success", promptText), 1 + promptText.length),
+      );
     }
     lines.push(theme.fg(topBorderColor, bot));
     return lines;
@@ -486,7 +500,9 @@ export default function (pi: ExtensionAPI) {
           const rows: string[][] = [];
           for (let i = 0; i < allAgents.length; i += cols) {
             const rowAgents = allAgents.slice(i, i + cols);
-            const cards = rowAgents.map((agent) => renderCard(agent, colWidth, theme));
+            const cards = rowAgents.map((agent) =>
+              renderCard(agent, colWidth, theme),
+            );
             const cardHeight = Math.max(...cards.map((card) => card.length));
             while (cards.length < cols) {
               cards.push(Array(cardHeight).fill(" ".repeat(colWidth)));
@@ -495,10 +511,7 @@ export default function (pi: ExtensionAPI) {
               rows.push(cards.map((card) => card[line] || ""));
             }
           }
-          const controls = theme.fg(
-            "dim",
-            "Grid view: /agents-grid <1-6> to change layout"
-          );
+          const controls = theme.fg("dim");
           const output = rows.map((columns) => columns.join(" ".repeat(gap)));
           text.setText(output.concat(["", controls]).join("\n"));
           return text.render(width);
@@ -543,7 +556,11 @@ export default function (pi: ExtensionAPI) {
     const state = agentStates.get(key);
     if (!state) {
       return Promise.resolve({
-        output: `Agent \"${agentName}\" not found. Available: ${Array.from(agentStates.values()).map((s) => displayName(s.def.name)).join(", ")}`,
+        output: `Agent \"${agentName}\" not found. Available: ${Array.from(
+          agentStates.values(),
+        )
+          .map((s) => displayName(s.def.name))
+          .join(", ")}`,
         exitCode: 1,
         elapsed: 0,
       });
@@ -567,7 +584,11 @@ export default function (pi: ExtensionAPI) {
       state.elapsed = Date.now() - startTime;
       updateWidget();
     }, 1000);
-    const model = state.def.model || (ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : "openrouter/google/gemini-3-flash-preview");
+    const model =
+      state.def.model ||
+      (ctx.model
+        ? `${ctx.model.provider}/${ctx.model.id}`
+        : "openrouter/google/gemini-3-flash-preview");
     const agentKey = state.def.name.toLowerCase().replace(/\s+/g, "-");
     const agentSessionFile = join(sessionDir, `${agentKey}.json`);
     const agentSystemPrompt = buildAgentSystemPrompt(state.def);
@@ -614,7 +635,11 @@ export default function (pi: ExtensionAPI) {
               if (delta?.type === "text_delta") {
                 textChunks.push(delta.delta || "");
                 const full = textChunks.join("");
-                const last = full.split("\n").filter((l: string) => l.trim()).pop() || "";
+                const last =
+                  full
+                    .split("\n")
+                    .filter((l: string) => l.trim())
+                    .pop() || "";
                 state.lastWork = last;
                 updateWidget();
               }
@@ -624,14 +649,18 @@ export default function (pi: ExtensionAPI) {
             } else if (event.type === "message_end") {
               const msg = event.message;
               if (msg?.usage && contextWindow > 0) {
-                state.contextPct = ((msg.usage.input || 0) / contextWindow) * 100;
+                state.contextPct =
+                  ((msg.usage.input || 0) / contextWindow) * 100;
                 updateWidget();
               }
             } else if (event.type === "agent_end") {
               const msgs = event.messages || [];
-              const last = [...msgs].reverse().find((m: any) => m.role === "assistant");
+              const last = [...msgs]
+                .reverse()
+                .find((m: any) => m.role === "assistant");
               if (last?.usage && contextWindow > 0) {
-                state.contextPct = ((last.usage.input || 0) / contextWindow) * 100;
+                state.contextPct =
+                  ((last.usage.input || 0) / contextWindow) * 100;
                 updateWidget();
               }
             }
@@ -658,13 +687,20 @@ export default function (pi: ExtensionAPI) {
           state.sessionFile = agentSessionFile;
         }
         const full = textChunks.join("");
-        state.lastWork = full.split("\n").filter((l: string) => l.trim()).pop() || "";
+        state.lastWork =
+          full
+            .split("\n")
+            .filter((l: string) => l.trim())
+            .pop() || "";
         updateWidget();
         if (!isActive) {
           clearWidgetAndFooter(ctx);
           updateStatus(ctx);
         }
-        ctx.ui.notify(`${displayName(state.def.name)} ${state.status} in ${Math.round(state.elapsed / 1000)}s`, state.status === "done" ? "success" : "error");
+        ctx.ui.notify(
+          `${displayName(state.def.name)} ${state.status} in ${Math.round(state.elapsed / 1000)}s`,
+          state.status === "done" ? "success" : "error",
+        );
         resolve({
           output: full,
           exitCode: code ?? 1,
@@ -809,7 +845,7 @@ export default function (pi: ExtensionAPI) {
       return new Text(header, 0, 0);
     },
   });
-  pi.registerCommand("agents-team", {
+  pi.registerCommand("agents-team:select", {
     description: "Select a team to work with",
     handler: async (_args, ctx) => {
       widgetCtx = ctx;
@@ -843,7 +879,7 @@ export default function (pi: ExtensionAPI) {
       );
     },
   });
-  pi.registerCommand("agents-list", {
+  pi.registerCommand("agents-team:list", {
     description: "List all loaded agents",
     handler: async (_args, _ctx) => {
       widgetCtx = _ctx;
@@ -859,7 +895,7 @@ export default function (pi: ExtensionAPI) {
       _ctx.ui.notify(names || "No agents loaded", "info");
     },
   });
-  pi.registerCommand("agents-grid", {
+  pi.registerCommand("agents-team:grid", {
     description: "Set grid columns: /agents-grid <1-6>",
     getArgumentCompletions: (prefix: string): AutocompleteItem[] | null => {
       const items = ["1", "2", "3", "4", "5", "6"].map((n) => ({
@@ -990,13 +1026,7 @@ ${agentCatalog}`,
       .map((s) => displayName(s.def.name))
       .join(", ");
     _ctx.ui.notify(
-      `Team: ${activeTeamName} (${members})\n` +
         `Team sets loaded from: ${teamsSource}\n\n` +
-        "/agents-team          Select a team\n" +
-        "/agents-team:activate Activate agent-team for this session\n" +
-        "/agents-team:deactivate Disable agent-team for this session\n" +
-        "/agents-list          List active agents and status\n" +
-        "/agents-grid <1-6>    Set grid column count",
       "info",
     );
     updateWidget();
