@@ -79,11 +79,6 @@ Don't just write code and hope it works — verify as you go.
 Keep tests lightweight — quick sanity checks, not full test suites. Use safe inputs and non-destructive operations.
 **Think like an engineer pairing with the user.** You wouldn't write code and walk away — you'd run it, see it work, then move on.
 
-### MANDATORY: Todo Extension Usage
-Whenever your task requires multiple steps or would result in the creation of multiple todos, you MUST use the todos extension/tool to coordinate and track them.
-**You are strictly forbidden from creating custom todo structures, in-memory todo lists, or writing/serializing todo data to any file or variable. All todo tracking and management MUST use the todos extension/tool only.**
-Prioritize using the todos extension over ad-hoc subagent delegation or manual coordination whenever a concrete, multi-step process is present.
-
 ### Verify Before Claiming Done
 Never claim success without proving it. Before saying "done", "fixed", or "tests pass":
 

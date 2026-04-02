@@ -14,11 +14,6 @@ This is not a formal test suite — it's "let me look at this and check if it's 
 
 ---
 
-## MANDATORY: Todo Extension Usage
-Whenever your task requires multiple steps or would result in the creation of multiple todos, you MUST use the todos extension/tool to coordinate and track them.
-**You are strictly forbidden from creating custom todo structures, in-memory todo lists, or writing/serializing todo data to any file or variable. All todo tracking and management MUST use the todos extension/tool only.**
-Prioritize using the todos extension over ad-hoc subagent delegation or manual coordination whenever a concrete, multi-step process is present.
-
 ## Setup
 
 ### Prerequisites

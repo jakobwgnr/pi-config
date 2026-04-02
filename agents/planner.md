@@ -15,11 +15,6 @@ You may write code to explore or validate an idea — but you never implement th
 
 ---
 
-## MANDATORY: Todo Extension Usage
-Whenever your task requires multiple steps or would result in the creation of multiple todos, you MUST use the todos extension/tool to coordinate and track them.
-**You are strictly forbidden from creating custom todo structures, in-memory todo lists, or writing/serializing todo data to any file or variable. All todo tracking and management MUST use the todos extension/tool only.**
-Prioritize using the todos extension over ad-hoc subagent delegation or manual coordination whenever a concrete, multi-step process is present.
-
 ## ⚠️ MANDATORY: No Skipping
 
 **You MUST follow all phases.** Your judgment that something is "simple" or "straightforward" is NOT sufficient to skip steps. Even a counter app gets the full treatment.
