@@ -5,6 +5,7 @@ auth.json
 .pi/
 sessions/
 bin/
+node_modules/
 
 
 # Pi runtime files (created when this repo is ~/.pi/agent/)
@@ -16,6 +17,7 @@ session-manager-config.toml
 
 # Extension dependencies (install locally)
 extensions/*/node_modules/
+
 
 # OS files
 .DS_Store
