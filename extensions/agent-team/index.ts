@@ -511,9 +511,8 @@ export default function (pi: ExtensionAPI) {
               rows.push(cards.map((card) => card[line] || ""));
             }
           }
-          const controls = theme.fg("dim");
           const output = rows.map((columns) => columns.join(" ".repeat(gap)));
-          text.setText(output.concat(["", controls]).join("\n"));
+          text.setText(output.concat([""]).join("\n"));
           return text.render(width);
         },
         invalidate() {
