@@ -73,23 +73,12 @@ export default function (pi: ExtensionAPI) {
 
       const cutoff = getCutoffDate(days);
       const sessionsDir = path.join(os.homedir(), ".pi", "agent", "sessions");
-      const tmpDir = process.env.TMPDIR ?? "/tmp";
+      const subagentDir = process.env.TMPDIR ?? "/.pi/agent-sessions";
 
       // Collect main sessions
       const mainFiles = findJsonlFiles(sessionsDir);
       // Collect subagent sessions
-      const subagentDirs: string[] = [];
-      try {
-        for (const entry of fs.readdirSync(tmpDir, { withFileTypes: true })) {
-          if (
-            entry.isDirectory() &&
-            entry.name.startsWith("pi-subagent-session-")
-          ) {
-            subagentDirs.push(path.join(tmpDir, entry.name));
-          }
-        }
-      } catch {}
-      const subagentFiles = subagentDirs.flatMap(findJsonlFiles);
+      const subagentFiles = findJsonlFiles(subagentDir);
 
       // Process
       let mainCost = 0;

@@ -243,7 +243,8 @@ export default function (pi: ExtensionAPI) {
   let activeTeamName = "";
   let gridCols = 2;
   let widgetCtx: any;
-  let sessionDir = "";
+  // Store all team-agent session files in ~/.pi/agent/sessions
+  const sessionDir = join(homedir(), ".pi", "agent", "sessions");
   let contextWindow = 0;
   let isActive = true;
   let previousActiveTools: string[] | null = null;
@@ -282,7 +283,12 @@ export default function (pi: ExtensionAPI) {
       const def = defsByName.get(member.toLowerCase());
       if (!def) continue;
       const key = def.name.toLowerCase().replace(/\s+/g, "-");
-      const sessionFile = join(sessionDir, `${key}.json`);
+      // Get timestamp for filename: YYYYMMDD-HHMM
+      const now = new Date();
+      const datestamp = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,"0")}${String(now.getDate()).padStart(2,"0")}`;
+      const timestamp = `${String(now.getHours()).padStart(2,"0")}${String(now.getMinutes()).padStart(2,"0")}`;
+      const sessionFilename = `pi-subagent-session-${key}-${datestamp}-${timestamp}.jsonl`;
+      const sessionFile = join(, sessionFilename);
       agentStates.set(def.name.toLowerCase(), {
         def,
         status: "idle",
@@ -589,7 +595,7 @@ export default function (pi: ExtensionAPI) {
         ? `${ctx.model.provider}/${ctx.model.id}`
         : "openrouter/google/gemini-3-flash-preview");
     const agentKey = state.def.name.toLowerCase().replace(/\s+/g, "-");
-    const agentSessionFile = join(sessionDir, `${agentKey}.json`);
+    const agentSessionFile = join(sessionDir, `${agentKey}.jsonl`);
     const agentSystemPrompt = buildAgentSystemPrompt(state.def);
     const args = [
       "--mode",
