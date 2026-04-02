@@ -244,7 +244,7 @@ export default function (pi: ExtensionAPI) {
   let gridCols = 2;
   let widgetCtx: any;
   // Store all team-agent session files in ~/.pi/agent/sessions
-  const sessionDir = join(homedir(), ".pi", "agent", "sessions");
+  let sessionDir = join(homedir(), ".pi", "agent", "sessions");
   let contextWindow = 0;
   let isActive = true;
   let previousActiveTools: string[] | null = null;
@@ -287,8 +287,8 @@ export default function (pi: ExtensionAPI) {
       const now = new Date();
       const datestamp = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,"0")}${String(now.getDate()).padStart(2,"0")}`;
       const timestamp = `${String(now.getHours()).padStart(2,"0")}${String(now.getMinutes()).padStart(2,"0")}`;
-      const sessionFilename = `pi-subagent-session-${key}-${datestamp}-${timestamp}.jsonl`;
-      const sessionFile = join(, sessionFilename);
+      const sessionFilename = `${key}-${datestamp}-${timestamp}.jsonl`;
+      const sessionFile = join(sessionDir, sessionFilename);
       agentStates.set(def.name.toLowerCase(), {
         def,
         status: "idle",
