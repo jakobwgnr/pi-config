@@ -15,7 +15,6 @@ if [ ! -f "$EXPECTED_DIR/settings.json" ]; then
   "defaultProvider": "azure-openai-responses",
   "defaultModel": "gpt-5.4",
   "packages": [
-    "git:github.com/nicobailon/pi-subagents",
     "git:github.com/nicobailon/pi-mcp-adapter",
     "git:github.com/nicobailon/pi-powerline-footer",
     "git:github.com/HazAT/pi-smart-sessions",
@@ -30,7 +29,6 @@ EOF
 else
   echo "settings.json already exists — skipping creation"
   echo "Make sure your packages list includes:"
-  echo '  "git:github.com/nicobailon/pi-subagents"'
   echo '  "git:github.com/nicobailon/pi-mcp-adapter"'
   echo '  "git:github.com/nicobailon/pi-powerline-footer"'
   echo '  "git:github.com/HazAT/pi-smart-sessions"'
@@ -43,7 +41,6 @@ fi
 
 # Install git packages
 echo "Installing packages..."
-pi install git:github.com/nicobailon/pi-subagents
 pi install git:github.com/nicobailon/pi-mcp-adapter
 pi install git:github.com/nicobailon/pi-powerline-footer
 pi install git:github.com/HazAT/pi-smart-sessions
