@@ -366,13 +366,6 @@ export default function (pi: ExtensionAPI) {
   function getAgentDetailLines(state: AgentState, contentWidth: number): string[] {
     const description = truncateLine(state.def.description || "No description", contentWidth);
     const task = truncateLine(state.task || "Waiting for work", contentWidth);
-    const currentWork = truncateLine(
-      state.status === "running"
-        ? state.lastWork || state.task || "Working..."
-        : state.lastWork || "No recent output",
-      contentWidth,
-    );
-    const model = truncateLine(`Model: ${state.def.model || "session default"}`, contentWidth);
     const tools = truncateLine(`Tools: ${state.def.tools}`, contentWidth);
     const runs = truncateLine(
       `Runs: ${state.runCount} · Session: ${state.sessionFile ? "resume" : "new"}`,
@@ -381,14 +374,9 @@ export default function (pi: ExtensionAPI) {
     const detailLines = [
       `Role: ${description}`,
       `Task: ${task}`,
-      `Doing: ${currentWork}`,
-      model,
       tools,
       runs,
     ];
-    if (state.def.customSystemPrompt) {
-      detailLines.push("Custom system prompt configured ✓");
-    }
     return detailLines.flatMap((line) => wrapText(line, contentWidth, 2));
   }
   function renderCard(
