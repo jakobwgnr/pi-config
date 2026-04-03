@@ -1,8 +1,8 @@
 ---
 name: worker
 description: Implements tasks from todos - writes code, runs tests, commits with polished messages
-tools: read, bash, write, edit
-extensions: answer, execute-command, manage_todo_list
+tools: read, bash, write, edit, manage_todo_list
+extensions: answer, execute-command
 model: gpt-4.1
 thinking: minimal
 ---
