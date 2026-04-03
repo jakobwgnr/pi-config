@@ -8,8 +8,13 @@
  *
  * Loads agent definitions from agents/*.md, .claude/agents/*.md, .pi/agents/*.md,
  * and ~/.pi/agent/agents/*.md.
- * Teams are defined in .pi/agents/teams.yaml — on boot a select dialog lets
- * you pick which team to work with. Only team members are available for dispatch.
+ * Teams are defined in .pi/agents/teams.yaml (YAML). Members may be strings or
+ * objects with optional name, path, color, consult-when, sequence. On boot a
+ * select dialog lets you pick which team to work with. Only team members are
+ * available for dispatch.
+ *
+ * Member object fields (optional): agent, path, name (card title), color (#RRGGBB),
+ * consult-when, sequence (same sequence = same widget row; unsequenced = last row).
  *
  * Usage: pi -e extensions/agent-team.ts
  */
@@ -28,7 +33,8 @@ import { Type } from "@sinclair/typebox";
 import { spawn } from "child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "fs";
 import { homedir } from "os";
-import { join, resolve } from "path";
+import { join, resolve, sep } from "path";
+import { parse as parseYaml } from "yaml";
 
 // ── Types ────────────────────────────────────────
 
@@ -62,6 +68,16 @@ interface AgentInstanceState {
   sessionFile: string | null;
   runCount: number;
   timer?: ReturnType<typeof setInterval>;
+  /** Optional card title from teams.yaml `name`. */
+  teamCardName?: string;
+  /** Optional hex color for card header/border (#RRGGBB). */
+  teamCardColor?: string;
+  /** Orchestrator hint from teams.yaml `consult-when`. */
+  teamConsultWhen?: string;
+  /** From teams.yaml `sequence`; undefined = unsequenced tail group. */
+  teamSequence?: number;
+  /** YAML list order within the team. */
+  teamOrder: number;
 }
 
 function agentLookupKey(def: AgentDef): string {
@@ -105,25 +121,109 @@ function displayName(name: string): string {
     .join(" ");
 }
 
-// ── Teams YAML Parser ────────────────────────────
+// ── Teams YAML ───────────────────────────────────
 
-function parseTeamsYaml(raw: string): Record<string, string[]> {
-  const teams: Record<string, string[]> = {};
-  let current: string | null = null;
-  for (const line of raw.split("\n")) {
-    const teamMatch = line.match(/^(\S[^:]*):$/);
-    if (teamMatch) {
-      current = teamMatch[1].trim();
-      teams[current] = [];
-      continue;
+interface TeamMemberSpec {
+  /** Scan lookup when `path` is not set. */
+  agent?: string;
+  /** Relative path to agent .md under project cwd. */
+  path?: string;
+  cardName?: string;
+  color?: string;
+  consultWhen?: string;
+  sequence?: number;
+  sourceOrder: number;
+}
+
+function isAbsolutePath(p: string): boolean {
+  return /^[/\\]/.test(p) || /^[a-zA-Z]:[\\/]/.test(p);
+}
+
+/** Resolve `rel` under `cwd`; reject .., absolute paths, and paths outside cwd. */
+function resolveSafeTeamAgentPath(cwd: string, rel: string): string | null {
+  const t = rel.trim();
+  if (!t || t.includes("..")) return null;
+  if (isAbsolutePath(t)) return null;
+  const abs = resolve(cwd, t);
+  const root = resolve(cwd);
+  if (abs !== root && !abs.startsWith(root + sep)) return null;
+  return abs;
+}
+
+function parseSequenceValue(v: unknown): number | undefined {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() !== "") {
+    const n = parseInt(v, 10);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
+function normalizeTeamMember(
+  item: unknown,
+  sourceOrder: number,
+): TeamMemberSpec | null {
+  if (typeof item === "string") {
+    const agent = item.trim();
+    if (!agent) return null;
+    return { agent, sourceOrder };
+  }
+  if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+  const o = item as Record<string, unknown>;
+  const agent =
+    typeof o.agent === "string" ? o.agent.trim() : undefined;
+  const path = typeof o.path === "string" ? o.path.trim() : undefined;
+  const cardName =
+    typeof o.name === "string" ? o.name.trim() : undefined;
+  const color = typeof o.color === "string" ? o.color.trim() : undefined;
+  const consultRaw = o["consult-when"] ?? o.consultWhen;
+  const consultWhen =
+    typeof consultRaw === "string" ? consultRaw.trim() : undefined;
+  const sequence = parseSequenceValue(o.sequence);
+  if (!path && !agent) return null;
+  return {
+    agent,
+    path,
+    cardName,
+    color,
+    consultWhen,
+    sequence,
+    sourceOrder,
+  };
+}
+
+function parseTeamsFile(raw: string): Record<string, TeamMemberSpec[]> {
+  let doc: unknown;
+  try {
+    doc = parseYaml(raw);
+  } catch {
+    return {};
+  }
+  if (!doc || typeof doc !== "object" || Array.isArray(doc)) return {};
+  const teams: Record<string, TeamMemberSpec[]> = {};
+  for (const [teamName, members] of Object.entries(doc)) {
+    if (!Array.isArray(members)) continue;
+    const specs: TeamMemberSpec[] = [];
+    for (let i = 0; i < members.length; i++) {
+      const spec = normalizeTeamMember(members[i], i);
+      if (spec) specs.push(spec);
     }
-    const itemMatch = line.match(/^\s+-\s+(.+)$/);
-    if (itemMatch && current) {
-      teams[current].push(itemMatch[1].trim());
-    }
+    teams[teamName] = specs;
   }
   return teams;
 }
+
+function ansiTruecolorFg(hex: string): string | null {
+  const m = hex.match(/^#([0-9a-fA-F]{6})$/);
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return `\x1b[38;2;${r};${g};${b}m`;
+}
+
+const ANSI_RESET = "\x1b[0m";
 
 // ── Frontmatter Parser ───────────────────────────
 
@@ -318,7 +418,9 @@ export default function (pi: ExtensionAPI) {
   /** One array of instances per agent type (key = def.name.toLowerCase()). */
   const agentStates: Map<string, AgentInstanceState[]> = new Map();
   let allAgentDefs: AgentDef[] = [];
-  let teams: Record<string, string[]> = {};
+  let teams: Record<string, TeamMemberSpec[]> = {};
+  /** Project cwd from last loadAgents; used to resolve team member paths. */
+  let teamCwd = "";
   let activeTeamName = "";
   let gridCols = 2;
   let widgetCtx: any;
@@ -338,11 +440,12 @@ export default function (pi: ExtensionAPI) {
       mkdirSync(sessionDir, { recursive: true });
     }
     allAgentDefs = scanAgentDirs(ctx.cwd);
+    teamCwd = ctx.cwd;
     const teamsPath = findTeamsPath(ctx.cwd);
     teamsSource = formatTeamsSource(ctx.cwd, teamsPath);
     if (teamsPath) {
       try {
-        teams = parseTeamsYaml(readFileSync(teamsPath, "utf-8"));
+        teams = parseTeamsFile(readFileSync(teamsPath, "utf-8"));
       } catch {
         teams = {};
       }
@@ -350,7 +453,12 @@ export default function (pi: ExtensionAPI) {
       teams = {};
     }
     if (Object.keys(teams).length === 0) {
-      teams = { all: allAgentDefs.map((d) => d.name) };
+      teams = {
+        all: allAgentDefs.map((d, i) => ({
+          agent: d.name,
+          sourceOrder: i,
+        })),
+      };
     }
   }
 
@@ -365,16 +473,81 @@ export default function (pi: ExtensionAPI) {
     gridCols = size <= 3 ? size : size === 4 ? 2 : 3;
   }
 
-  /** Team member order, then ascending instanceId per member. */
-  function flattenTeamInstances(): AgentInstanceState[] {
-    const members = teams[activeTeamName] || [];
-    const out: AgentInstanceState[] = [];
-    for (const member of members) {
-      const list = agentStates.get(member.toLowerCase());
-      if (!list?.length) continue;
-      out.push(...[...list].sort((a, b) => a.instanceId - b.instanceId));
+  function defsByNameMap(): Map<string, AgentDef> {
+    return new Map(allAgentDefs.map((d) => [d.name.toLowerCase(), d]));
+  }
+
+  function resolveSpecToLookupKey(spec: TeamMemberSpec): string | null {
+    const defsByName = defsByNameMap();
+    if (spec.path) {
+      const abs = resolveSafeTeamAgentPath(teamCwd, spec.path);
+      if (!abs) return null;
+      const def = parseAgentFile(abs);
+      return def ? agentLookupKey(def) : null;
+    }
+    if (spec.agent) {
+      const def = defsByName.get(spec.agent.toLowerCase());
+      return def ? agentLookupKey(def) : null;
+    }
+    return null;
+  }
+
+  /** One widget row per sequence value; trailing row for all unsequenced agents. */
+  function partitionInstancesForWidget(
+    ordered: AgentInstanceState[],
+  ): AgentInstanceState[][] {
+    if (ordered.length === 0) return [];
+    const out: AgentInstanceState[][] = [];
+    let i = 0;
+    while (i < ordered.length) {
+      const seq = ordered[i].teamSequence;
+      const group: AgentInstanceState[] = [];
+      if (seq !== undefined) {
+        while (
+          i < ordered.length &&
+          ordered[i].teamSequence === seq
+        ) {
+          group.push(ordered[i]);
+          i++;
+        }
+      } else {
+        while (
+          i < ordered.length &&
+          ordered[i].teamSequence === undefined
+        ) {
+          group.push(ordered[i]);
+          i++;
+        }
+      }
+      out.push(group);
     }
     return out;
+  }
+
+  /** Canonical order for prompts, lists, and widget rows (sequence, then YAML order). */
+  function flattenTeamInstances(): AgentInstanceState[] {
+    const specs = teams[activeTeamName] || [];
+    const collected: AgentInstanceState[] = [];
+    for (const spec of specs) {
+      const lk = resolveSpecToLookupKey(spec);
+      if (!lk) continue;
+      const list = agentStates.get(lk);
+      if (!list?.length) continue;
+      collected.push(
+        ...[...list].sort((a, b) => a.instanceId - b.instanceId),
+      );
+    }
+    return collected.sort((a, b) => {
+      const sa = a.teamSequence ?? Number.POSITIVE_INFINITY;
+      const sb = b.teamSequence ?? Number.POSITIVE_INFINITY;
+      if (sa !== sb) return sa - sb;
+      const oa = a.teamOrder ?? 0;
+      const ob = b.teamOrder ?? 0;
+      if (oa !== ob) return oa - ob;
+      const ka = agentLookupKey(a.def).localeCompare(agentLookupKey(b.def));
+      if (ka !== 0) return ka;
+      return a.instanceId - b.instanceId;
+    });
   }
 
   function availableAgentNamesForError(): string {
@@ -391,20 +564,53 @@ export default function (pi: ExtensionAPI) {
     return labels.join(", ");
   }
 
-  function formatInstanceLabel(def: AgentDef, instanceId: number): string {
-    return `${displayName(def.name)} #${instanceId}`;
+  function formatInstanceLabel(state: AgentInstanceState): string {
+    const base =
+      state.teamCardName?.trim() || displayName(state.def.name);
+    return `${base} #${state.instanceId}`;
   }
 
   function activateTeam(teamName: string) {
     activeTeamName = teamName;
     const members = teams[teamName] || [];
-    const defsByName = new Map(
-      allAgentDefs.map((d) => [d.name.toLowerCase(), d]),
-    );
+    const defsByName = defsByNameMap();
     agentStates.clear();
-    for (const member of members) {
-      const def = defsByName.get(member.toLowerCase());
-      if (!def) continue;
+    const notify = (msg: string) => {
+      if (widgetCtx?.hasUI && widgetCtx.ui?.notify) {
+        widgetCtx.ui.notify(msg, "warning");
+      }
+    };
+    for (const spec of members) {
+      let def: AgentDef | null = null;
+      if (spec.path) {
+        const abs = resolveSafeTeamAgentPath(teamCwd, spec.path);
+        if (!abs) {
+          notify(`Team member: invalid or unsafe path "${spec.path}"`);
+          continue;
+        }
+        if (!existsSync(abs)) {
+          notify(`Team member: file not found "${spec.path}"`);
+          continue;
+        }
+        def = parseAgentFile(abs);
+        if (!def) {
+          notify(`Team member: could not parse agent file "${spec.path}"`);
+          continue;
+        }
+      } else if (spec.agent) {
+        def = defsByName.get(spec.agent.toLowerCase()) ?? null;
+        if (!def) {
+          notify(
+            `Team member: no agent "${spec.agent}" found in agents directories`,
+          );
+          continue;
+        }
+      } else {
+        notify(
+          `Team member: missing agent and path (index ${spec.sourceOrder})`,
+        );
+        continue;
+      }
       const lk = agentLookupKey(def);
       const fk = agentFileKey(def);
       const sessionFile = initialSessionFileForInstance(sessionDir, fk, 1);
@@ -420,6 +626,11 @@ export default function (pi: ExtensionAPI) {
           contextPct: 0,
           sessionFile,
           runCount: 0,
+          teamCardName: spec.cardName,
+          teamCardColor: spec.color,
+          teamConsultWhen: spec.consultWhen,
+          teamSequence: spec.sequence,
+          teamOrder: spec.sourceOrder,
         },
       ]);
     }
@@ -531,6 +742,9 @@ export default function (pi: ExtensionAPI) {
     const statusIcon = getStatusIcon(state.status);
     const topBorderColor = "dim";
     const sideBorderColor = "dim";
+    const customFg = state.teamCardColor
+      ? ansiTruecolorFg(state.teamCardColor)
+      : null;
     const top = "┌" + "─".repeat(w) + "┐";
     const bot = "└" + "─".repeat(w) + "┘";
     const border = (content: string, visibleLength: number) =>
@@ -538,13 +752,22 @@ export default function (pi: ExtensionAPI) {
       content +
       " ".repeat(Math.max(0, w - visibleLength)) +
       theme.fg(sideBorderColor, "│");
-    const lines = [theme.fg(topBorderColor, top)];
+    const topLine =
+      customFg != null
+        ? customFg + top + ANSI_RESET
+        : theme.fg(topBorderColor, top);
+    const lines = [topLine];
     const modelSuffix = state.def.model ? ` [${state.def.model}]` : "";
+    const headerLabel =
+      state.teamCardName?.trim() || displayName(state.def.name);
     const nameText = truncateToWidth(
-      `${displayName(state.def.name)} #${state.instanceId}${modelSuffix}`,
+      `${headerLabel} #${state.instanceId}${modelSuffix}`,
       Math.max(1, w - 1),
     );
-    const headerContent = theme.fg("accent", theme.bold(nameText));
+    const headerContent =
+      customFg != null
+        ? customFg + theme.bold(nameText) + ANSI_RESET
+        : theme.fg("accent", theme.bold(nameText));
     lines.push(border(" " + headerContent, 1 + visibleWidth(headerContent)));
     const statusStr = `${statusIcon} ${state.status}${state.status !== "idle" ? ` ${Math.round(state.elapsed / 1000)}s` : ""}`;
     const statusText = truncateLine(statusStr, w - 1);
@@ -573,7 +796,11 @@ export default function (pi: ExtensionAPI) {
         border(" " + theme.fg("success", promptText), 1 + promptText.length),
       );
     }
-    lines.push(theme.fg(topBorderColor, bot));
+    const botLine =
+      customFg != null
+        ? customFg + bot + ANSI_RESET
+        : theme.fg(topBorderColor, bot);
+    lines.push(botLine);
     return lines;
   }
   function clearWidgetAndFooter(ctx = widgetCtx) {
@@ -631,20 +858,18 @@ export default function (pi: ExtensionAPI) {
             );
             return text.render(width);
           }
-          const allAgents = flattenTeamInstances();
-          const cols = Math.min(gridCols, allAgents.length);
+          const ordered = flattenTeamInstances();
+          const rowGroups = partitionInstancesForWidget(ordered);
           const gap = 1;
-          const colWidth = Math.floor((width - gap * (cols - 1)) / cols);
           const rows: string[][] = [];
-          for (let i = 0; i < allAgents.length; i += cols) {
-            const rowAgents = allAgents.slice(i, i + cols);
+          for (const rowAgents of rowGroups) {
+            const cols = rowAgents.length;
+            if (cols === 0) continue;
+            const colWidth = Math.floor((width - gap * (cols - 1)) / cols);
             const cards = rowAgents.map((agent) =>
               renderCard(agent, colWidth, theme),
             );
             const cardHeight = Math.max(...cards.map((card) => card.length));
-            while (cards.length < cols) {
-              cards.push(Array(cardHeight).fill(" ".repeat(colWidth)));
-            }
             for (let line = 0; line < cardHeight; line++) {
               rows.push(cards.map((card) => card[line] || ""));
             }
@@ -666,7 +891,9 @@ export default function (pi: ExtensionAPI) {
     loadAgents(ctx);
     const teamNames = Object.keys(teams);
     if (teamNames.length > 0) {
-      activateTeam(teams[activeTeamName] ? activeTeamName : teamNames[0]);
+      activateTeam(
+        teams[activeTeamName]?.length ? activeTeamName : teamNames[0],
+      );
     } else {
       activeTeamName = "";
       agentStates.clear();
@@ -684,7 +911,9 @@ export default function (pi: ExtensionAPI) {
     loadAgents(ctx);
     const teamNames = Object.keys(teams);
     if (teamNames.length > 0) {
-      activateTeam(teams[activeTeamName] ? activeTeamName : teamNames[0]);
+      activateTeam(
+        teams[activeTeamName]?.length ? activeTeamName : teamNames[0],
+      );
     } else {
       activeTeamName = "";
       agentStates.clear();
@@ -714,6 +943,7 @@ export default function (pi: ExtensionAPI) {
     const ensureInstance = (instanceId: number): AgentInstanceState => {
       let s = instances.find((x) => x.instanceId === instanceId);
       if (s) return s;
+      const t = instances[0];
       s = {
         instanceId,
         def,
@@ -725,6 +955,11 @@ export default function (pi: ExtensionAPI) {
         contextPct: 0,
         sessionFile: initialSessionFileForInstance(sessionDir, fk, instanceId),
         runCount: 0,
+        teamCardName: t.teamCardName,
+        teamCardColor: t.teamCardColor,
+        teamConsultWhen: t.teamConsultWhen,
+        teamSequence: t.teamSequence,
+        teamOrder: t.teamOrder,
       };
       instances.push(s);
       instances.sort((a, b) => a.instanceId - b.instanceId);
@@ -747,7 +982,7 @@ export default function (pi: ExtensionAPI) {
       if (s.status === "running") {
         return {
           ok: false,
-          message: `Agent \"${formatInstanceLabel(def, requestedInstance)}\" is already running. Wait for it to finish.`,
+          message: `Agent \"${formatInstanceLabel(s)}\" is already running. Wait for it to finish.`,
         };
       }
       return { ok: true, state: s };
@@ -925,7 +1160,7 @@ export default function (pi: ExtensionAPI) {
           updateStatus(ctx);
         }
         ctx.ui.notify(
-          `${formatInstanceLabel(state.def, state.instanceId)} ${state.status} in ${Math.round(state.elapsed / 1000)}s`,
+          `${formatInstanceLabel(state)} ${state.status} in ${Math.round(state.elapsed / 1000)}s`,
           state.status === "done" ? "success" : "error",
         );
         resolve({
@@ -1130,8 +1365,13 @@ export default function (pi: ExtensionAPI) {
         return;
       }
       const options = teamNames.map((name) => {
-        const members = teams[name].map((m) => displayName(m));
-        return `${name} — ${members.join(", ")}`;
+        const memberSpecs = teams[name];
+        const labels = memberSpecs.map((spec) => {
+          if (spec.cardName?.trim()) return spec.cardName.trim();
+          if (spec.agent) return displayName(spec.agent);
+          return spec.path || "?";
+        });
+        return `${name} — ${labels.join(", ")}`;
       });
       const choice = await ctx.ui.select("Select Team", options);
       if (choice === undefined) return;
@@ -1142,7 +1382,7 @@ export default function (pi: ExtensionAPI) {
       updateStatus(ctx);
       ctx.ui.notify(
         `Team: ${name} — ${flattenTeamInstances()
-          .map((s) => formatInstanceLabel(s.def, s.instanceId))
+          .map((s) => formatInstanceLabel(s))
           .join(", ")}`,
         "info",
       );
@@ -1158,7 +1398,7 @@ export default function (pi: ExtensionAPI) {
       const names = flattenTeamInstances()
         .map((s) => {
           const session = s.sessionFile ? "resumed" : "new";
-          return `${formatInstanceLabel(s.def, s.instanceId)} (${s.status}, ${session}, runs: ${s.runCount}): ${s.def.description}`;
+          return `${formatInstanceLabel(s)} (${s.status}, ${session}, runs: ${s.runCount}): ${s.def.description}`;
         })
         .join("\n");
       _ctx.ui.notify(names || "No agents loaded", "info");
@@ -1182,7 +1422,10 @@ export default function (pi: ExtensionAPI) {
       const n = parseInt(args?.trim() || "", 10);
       if (n >= 1 && n <= 6) {
         gridCols = n;
-        _ctx.ui.notify(`Grid set to ${gridCols} columns`, "info");
+        _ctx.ui.notify(
+          `Grid preference set to ${gridCols} (team widget uses one row per sequence value)`,
+          "info",
+        );
         updateWidget();
       } else {
         _ctx.ui.notify("Usage: /agents-grid <1-6>", "error");
@@ -1224,7 +1467,7 @@ export default function (pi: ExtensionAPI) {
       }
       enableAgentTeam(ctx);
       const members = flattenTeamInstances()
-        .map((s) => formatInstanceLabel(s.def, s.instanceId))
+        .map((s) => formatInstanceLabel(s))
         .join(", ");
       ctx.ui.notify(
         `Agent team activated for this session\n` +
@@ -1245,21 +1488,66 @@ export default function (pi: ExtensionAPI) {
   });
   pi.on("before_agent_start", async (_event, _ctx) => {
     if (!isActive) return;
-    const agentCatalog = Array.from(agentStates.values())
-      .map((list) => {
-        const s = list[0];
-        if (!s) return "";
-        const ext =
-          s.def.extensionSlugs.length > 0
-            ? `\n**Extensions:** ${s.def.extensionSlugs.join(", ")}`
-            : "";
-        return `### ${displayName(s.def.name)}\n**Dispatch as:** \`${s.def.name}\` (optional \`instance\`: 1, 2, … for parallel slots)\n${s.def.description}\n**Tools:** ${s.def.tools}${ext}`;
-      })
-      .filter(Boolean)
-      .join("\n\n");
-    const teamMembers = (teams[activeTeamName] || [])
-      .map((m) => displayName(m))
-      .join(", ");
+    const ordered = flattenTeamInstances();
+    const seenCat = new Set<string>();
+    const catalogPieces: string[] = [];
+    for (const s of ordered) {
+      const k = agentLookupKey(s.def);
+      if (seenCat.has(k)) continue;
+      seenCat.add(k);
+      const title =
+        s.teamCardName?.trim() || displayName(s.def.name);
+      const ext =
+        s.def.extensionSlugs.length > 0
+          ? `\n**Extensions:** ${s.def.extensionSlugs.join(", ")}`
+          : "";
+      const consult = s.teamConsultWhen
+        ? `\n**Consult when:** ${s.teamConsultWhen}`
+        : "";
+      catalogPieces.push(
+        `### ${title}\n**Dispatch as:** \`${s.def.name}\` (optional \`instance\`: 1, 2, … for parallel slots)\n${s.def.description}\n**Tools:** ${s.def.tools}${ext}${consult}`,
+      );
+    }
+    const agentCatalog = catalogPieces.join("\n\n");
+
+    const specs = teams[activeTeamName] || [];
+    const memberLabels: string[] = [];
+    const seenMem = new Set<string>();
+    for (const spec of specs) {
+      const lk = resolveSpecToLookupKey(spec);
+      if (!lk || !agentStates.has(lk)) continue;
+      if (seenMem.has(lk)) continue;
+      seenMem.add(lk);
+      const def = agentStates.get(lk)![0].def;
+      memberLabels.push(
+        spec.cardName?.trim() || displayName(def.name),
+      );
+    }
+    const teamMembers = memberLabels.join(", ");
+
+    const numericSeqs = specs
+      .map((sp) => sp.sequence)
+      .filter((n): n is number => typeof n === "number" && Number.isFinite(n));
+    let firstDelegateLine = "";
+    if (numericSeqs.length > 0) {
+      const minS = Math.min(...numericSeqs);
+      const preferredNames: string[] = [];
+      const seenP = new Set<string>();
+      for (const spec of specs) {
+        if (spec.sequence !== minS) continue;
+        const lk = resolveSpecToLookupKey(spec);
+        if (!lk || seenP.has(lk)) continue;
+        seenP.add(lk);
+        const def = agentStates.get(lk)?.[0]?.def;
+        if (def) preferredNames.push(`\`${def.name}\``);
+      }
+      if (preferredNames.length > 0) {
+        firstDelegateLine = `
+When starting work on a **new** user goal, prefer an initial dispatch to: ${preferredNames.join(", ")} (lowest \`sequence\` on this team), unless another specialist is clearly more appropriate.
+`;
+      }
+    }
+
     return {
       systemPrompt: `You are a dispatcher agent. You coordinate specialist agents to accomplish tasks.
 You do NOT have direct access to the codebase. You MUST delegate all work through
@@ -1268,7 +1556,7 @@ agents using the dispatch_agent tool.
 ## Active Team: ${activeTeamName}
 Members: ${teamMembers}
 You can ONLY dispatch to agents listed below. Do not attempt to dispatch to agents outside this team.
-
+${firstDelegateLine}
 ## How to Work
 - Analyze the user's request and break it into clear sub-tasks
 - Choose the right agent(s) for each sub-task
