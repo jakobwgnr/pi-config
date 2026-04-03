@@ -636,20 +636,71 @@ export default function (pi: ExtensionAPI) {
     return ` · ${done} of ${todos.length} TODOs done`;
   }
 
-  function pickTodoStripItems(
-    todos: TodoItem[],
-  ): [TodoItem | null, TodoItem | null, TodoItem | null] {
+  /** Up to 3 todos for the agent card strip when todos.length >= 3; otherwise all todos. */
+  function pickTodoStripItems(todos: TodoItem[]): TodoItem[] {
+    const n = todos.length;
+    if (n === 0) return [];
+    if (n < 3) return todos.slice();
+
+    const allOpen = todos.every((t) => t.status === "not-started");
+    if (allOpen) return todos.slice(0, 3);
+
+    const allDone = todos.every((t) => t.status === "completed");
+    if (allDone) return todos.slice(-3);
+
     let lastCompleted: TodoItem | null = null;
+    let lastCompletedIdx = -1;
     for (let i = 0; i < todos.length; i++) {
       if (todos[i]!.status === "completed") {
         lastCompleted = todos[i]!;
+        lastCompletedIdx = i;
       }
     }
-    const inProgress =
-      todos.find((t) => t.status === "in-progress") ?? null;
-    const next =
-      todos.find((t) => t.status === "not-started") ?? null;
-    return [lastCompleted, inProgress, next];
+    const inProgIdx = todos.findIndex((t) => t.status === "in-progress");
+    const inProgress = inProgIdx >= 0 ? todos[inProgIdx]! : null;
+
+    const out: TodoItem[] = [];
+    const seen = new Set<number>();
+    const push = (t: TodoItem | null) => {
+      if (!t || seen.has(t.id)) return;
+      seen.add(t.id);
+      out.push(t);
+    };
+
+    if (inProgIdx >= 0) {
+      let nextOpen: TodoItem | null = null;
+      const after = todos.find(
+        (t, i) => i > inProgIdx && t.status === "not-started",
+      );
+      nextOpen =
+        after ?? todos.find((t) => t.status === "not-started") ?? null;
+      push(lastCompleted);
+      push(inProgress);
+      push(nextOpen);
+      for (const t of todos) {
+        if (out.length >= 3) break;
+        push(t);
+      }
+      return out.slice(0, 3);
+    }
+
+    // Mixed list, no in-progress: last completed + not-started items in list order, then
+    // earlier completed if needed; sort by index so rows match todo order.
+    push(lastCompleted);
+    for (const t of todos) {
+      if (t.status === "not-started") push(t);
+      if (out.length >= 3) break;
+    }
+    for (let i = lastCompletedIdx - 1; i >= 0 && out.length < 3; i--) {
+      if (todos[i]!.status === "completed") push(todos[i]!);
+    }
+    for (const t of todos) {
+      if (out.length >= 3) break;
+      push(t);
+    }
+    const byIndex = (a: TodoItem, b: TodoItem) =>
+      todos.findIndex((x) => x.id === a.id) - todos.findIndex((x) => x.id === b.id);
+    return out.sort(byIndex).slice(0, 3);
   }
 
   function loadAgents(ctx: ExtensionContext) {
@@ -1059,8 +1110,8 @@ export default function (pi: ExtensionAPI) {
           : theme.fg(topBorderColor, sepInner),
       );
       const cw = w - 1;
-      const [doneItem, progItem, nextItem] = pickTodoStripItems(todos);
-      const pushTodoRow = (item: TodoItem) => {
+      const strip = pickTodoStripItems(todos);
+      for (const item of strip) {
         const icon = TODO_STATUS_ICONS[item.status];
         const rowColor =
           item.status === "completed"
@@ -1072,10 +1123,7 @@ export default function (pi: ExtensionAPI) {
         lines.push(
           border(" " + theme.fg(rowColor, text), 1 + text.length),
         );
-      };
-      if (doneItem) pushTodoRow(doneItem);
-      if (progItem) pushTodoRow(progItem);
-      if (nextItem) pushTodoRow(nextItem);
+      }
     }
     const botLine =
       customFg != null

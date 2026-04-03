@@ -37,6 +37,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("turn_end", async (_event, ctx) => {
     currentCtx = ctx;
+    state.loadFromSession(ctx);
     updateWidget(state, ctx);
   });
 
@@ -55,6 +56,7 @@ export default function (pi: ExtensionAPI) {
         return;
       }
 
+      state.loadFromSession(ctx);
       const todos = state.read();
       if (todos.length === 0) {
         ctx.ui.notify(
