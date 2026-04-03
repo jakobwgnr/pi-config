@@ -3,7 +3,8 @@
  *
  * The primary Pi agent has NO codebase tools. It can ONLY delegate work
  * to specialist agents via the `dispatch_agent` tool. Each specialist
- * maintains its own Pi session for cross-invocation memory.
+ * instance has its own Pi session file (`{role}-1.jsonl`, `{role}-2.jsonl`, …)
+ * so the same role can run in parallel.
  *
  * Loads agent definitions from agents/*.md, .claude/agents/*.md, .pi/agents/*.md,
  * and ~/.pi/agent/agents/*.md.
@@ -46,17 +47,53 @@ interface AgentDef {
   file: string;
 }
 
-interface AgentState {
+type AgentStatus = "idle" | "running" | "done" | "error" | "disabled";
+
+interface AgentInstanceState {
+  instanceId: number;
   def: AgentDef;
-  status: "idle" | "running" | "done" | "error" | "disabled";
+  status: AgentStatus;
   task: string;
   toolCount: number;
   elapsed: number;
   lastWork: string;
   contextPct: number;
+  /** Path to existing session for -c resume, or null for a fresh session file. */
   sessionFile: string | null;
   runCount: number;
   timer?: ReturnType<typeof setInterval>;
+}
+
+function agentLookupKey(def: AgentDef): string {
+  return def.name.toLowerCase();
+}
+
+function agentFileKey(def: AgentDef): string {
+  return def.name.toLowerCase().replace(/\s+/g, "-");
+}
+
+function initialSessionFileForInstance(
+  sessionDir: string,
+  fileKey: string,
+  instanceId: number,
+): string | null {
+  const numbered = join(sessionDir, `${fileKey}-${instanceId}.jsonl`);
+  if (existsSync(numbered)) return numbered;
+  if (instanceId === 1) {
+    const legacy = join(sessionDir, `${fileKey}.jsonl`);
+    if (existsSync(legacy)) return legacy;
+  }
+  return null;
+}
+
+function sessionPathForSpawn(
+  state: AgentInstanceState,
+  sessionDir: string,
+  fileKey: string,
+): string {
+  const numbered = join(sessionDir, `${fileKey}-${state.instanceId}.jsonl`);
+  if (state.sessionFile) return state.sessionFile;
+  return numbered;
 }
 
 // ── Display Name Helper ──────────────────────────
@@ -278,7 +315,8 @@ function formatTeamsSource(cwd: string, teamsPath: string | null): string {
 // ── Extension ────────────────────────────────────
 
 export default function (pi: ExtensionAPI) {
-  const agentStates: Map<string, AgentState> = new Map();
+  /** One array of instances per agent type (key = def.name.toLowerCase()). */
+  const agentStates: Map<string, AgentInstanceState[]> = new Map();
   let allAgentDefs: AgentDef[] = [];
   let teams: Record<string, string[]> = {};
   let activeTeamName = "";
@@ -316,6 +354,47 @@ export default function (pi: ExtensionAPI) {
     }
   }
 
+  function totalInstanceCount(): number {
+    let n = 0;
+    for (const list of agentStates.values()) n += list.length;
+    return n;
+  }
+
+  function recomputeGridCols() {
+    const size = totalInstanceCount();
+    gridCols = size <= 3 ? size : size === 4 ? 2 : 3;
+  }
+
+  /** Team member order, then ascending instanceId per member. */
+  function flattenTeamInstances(): AgentInstanceState[] {
+    const members = teams[activeTeamName] || [];
+    const out: AgentInstanceState[] = [];
+    for (const member of members) {
+      const list = agentStates.get(member.toLowerCase());
+      if (!list?.length) continue;
+      out.push(...[...list].sort((a, b) => a.instanceId - b.instanceId));
+    }
+    return out;
+  }
+
+  function availableAgentNamesForError(): string {
+    const seen = new Set<string>();
+    const labels: string[] = [];
+    for (const list of agentStates.values()) {
+      const def = list[0]?.def;
+      if (!def) continue;
+      const n = agentLookupKey(def);
+      if (seen.has(n)) continue;
+      seen.add(n);
+      labels.push(displayName(def.name));
+    }
+    return labels.join(", ");
+  }
+
+  function formatInstanceLabel(def: AgentDef, instanceId: number): string {
+    return `${displayName(def.name)} #${instanceId}`;
+  }
+
   function activateTeam(teamName: string) {
     activeTeamName = teamName;
     const members = teams[teamName] || [];
@@ -326,22 +405,25 @@ export default function (pi: ExtensionAPI) {
     for (const member of members) {
       const def = defsByName.get(member.toLowerCase());
       if (!def) continue;
-      const key = def.name.toLowerCase().replace(/\s+/g, "-");
-      const sessionFile = join(sessionDir, `${key}.jsonl`);
-      agentStates.set(def.name.toLowerCase(), {
-        def,
-        status: "idle",
-        task: "",
-        toolCount: 0,
-        elapsed: 0,
-        lastWork: "",
-        contextPct: 0,
-        sessionFile: existsSync(sessionFile) ? sessionFile : null,
-        runCount: 0,
-      });
+      const lk = agentLookupKey(def);
+      const fk = agentFileKey(def);
+      const sessionFile = initialSessionFileForInstance(sessionDir, fk, 1);
+      agentStates.set(lk, [
+        {
+          instanceId: 1,
+          def,
+          status: "idle",
+          task: "",
+          toolCount: 0,
+          elapsed: 0,
+          lastWork: "",
+          contextPct: 0,
+          sessionFile,
+          runCount: 0,
+        },
+      ]);
     }
-    const size = agentStates.size;
-    gridCols = size <= 3 ? size : size === 4 ? 2 : 3;
+    recomputeGridCols();
   }
 
   // ── Grid Rendering ───────────────────────────
@@ -384,7 +466,7 @@ export default function (pi: ExtensionAPI) {
     }
     return lines;
   }
-  function getStatusColor(status: AgentState["status"]): string {
+  function getStatusColor(status: AgentStatus): string {
     return status === "idle"
       ? "dim"
       : status === "running"
@@ -395,7 +477,7 @@ export default function (pi: ExtensionAPI) {
             ? "muted"
             : "error";
   }
-  function getStatusIcon(status: AgentState["status"]): string {
+  function getStatusIcon(status: AgentStatus): string {
     return status === "idle"
       ? "○"
       : status === "running"
@@ -406,13 +488,13 @@ export default function (pi: ExtensionAPI) {
             ? "⏸"
             : "✗";
   }
-  function getContextBar(state: AgentState): string {
+  function getContextBar(state: AgentInstanceState): string {
     const filled = clamp(Math.ceil(state.contextPct / 20), 0, 5);
     const bar = "#".repeat(filled) + "-".repeat(5 - filled);
     return `[${bar}] ${Math.ceil(state.contextPct)}%`;
   }
   function getAgentDetailLines(
-    state: AgentState,
+    state: AgentInstanceState,
     contentWidth: number,
   ): string[] {
     const description = truncateLine(
@@ -440,7 +522,7 @@ export default function (pi: ExtensionAPI) {
     return detailLines.flatMap((line) => wrapText(line, contentWidth, 2));
   }
   function renderCard(
-    state: AgentState,
+    state: AgentInstanceState,
     colWidth: number,
     theme: any,
   ): string[] {
@@ -459,7 +541,7 @@ export default function (pi: ExtensionAPI) {
     const lines = [theme.fg(topBorderColor, top)];
     const modelSuffix = state.def.model ? ` [${state.def.model}]` : "";
     const nameText = truncateToWidth(
-      displayName(state.def.name) + modelSuffix,
+      `${displayName(state.def.name)} #${state.instanceId}${modelSuffix}`,
       Math.max(1, w - 1),
     );
     const headerContent = theme.fg("accent", theme.bold(nameText));
@@ -530,7 +612,7 @@ export default function (pi: ExtensionAPI) {
     ctx.ui.setStatus(
       "agent-team",
       isActive
-        ? `Team: ${activeTeamName} (${agentStates.size})`
+        ? `Team: ${activeTeamName} (${totalInstanceCount()} instances)`
         : "Team: disabled",
     );
   }
@@ -549,7 +631,7 @@ export default function (pi: ExtensionAPI) {
             );
             return text.render(width);
           }
-          const allAgents = Array.from(agentStates.values());
+          const allAgents = flattenTeamInstances();
           const cols = Math.min(gridCols, allAgents.length);
           const gap = 1;
           const colWidth = Math.floor((width - gap * (cols - 1)) / cols);
@@ -612,39 +694,102 @@ export default function (pi: ExtensionAPI) {
     setFooter(ctx);
   }
 
+  function allocateDispatchSlot(
+    agentName: string,
+    requestedInstance: number | undefined,
+  ):
+    | { ok: true; state: AgentInstanceState }
+    | { ok: false; message: string } {
+    const key = agentName.toLowerCase();
+    const instances = agentStates.get(key);
+    if (!instances?.length) {
+      return {
+        ok: false,
+        message: `Agent \"${agentName}\" not found. Available: ${availableAgentNamesForError()}`,
+      };
+    }
+    const def = instances[0].def;
+    const fk = agentFileKey(def);
+
+    const ensureInstance = (instanceId: number): AgentInstanceState => {
+      let s = instances.find((x) => x.instanceId === instanceId);
+      if (s) return s;
+      s = {
+        instanceId,
+        def,
+        status: "idle",
+        task: "",
+        toolCount: 0,
+        elapsed: 0,
+        lastWork: "",
+        contextPct: 0,
+        sessionFile: initialSessionFileForInstance(sessionDir, fk, instanceId),
+        runCount: 0,
+      };
+      instances.push(s);
+      instances.sort((a, b) => a.instanceId - b.instanceId);
+      recomputeGridCols();
+      updateWidget();
+      return s;
+    };
+
+    if (requestedInstance !== undefined) {
+      if (
+        !Number.isInteger(requestedInstance) ||
+        requestedInstance < 1
+      ) {
+        return {
+          ok: false,
+          message: `Invalid instance for \"${agentName}\": use a positive integer (1, 2, …).`,
+        };
+      }
+      const s = ensureInstance(requestedInstance);
+      if (s.status === "running") {
+        return {
+          ok: false,
+          message: `Agent \"${formatInstanceLabel(def, requestedInstance)}\" is already running. Wait for it to finish.`,
+        };
+      }
+      return { ok: true, state: s };
+    }
+
+    const idle = instances.find((s) => s.status !== "running");
+    if (idle) return { ok: true, state: idle };
+
+    const maxId = Math.max(...instances.map((i) => i.instanceId));
+    return { ok: true, state: ensureInstance(maxId + 1) };
+  }
+
   function dispatchAgent(
     agentName: string,
     task: string,
     ctx: any,
-  ): Promise<{ output: string; exitCode: number; elapsed: number }> {
+    requestedInstance?: number,
+  ): Promise<{
+    output: string;
+    exitCode: number;
+    elapsed: number;
+    instanceId: number;
+  }> {
     if (!isActive) {
       return Promise.resolve({
         output:
           "Agent team is deactivated. dispatch_agent is unavailable for this session.",
         exitCode: 1,
         elapsed: 0,
+        instanceId: 0,
       });
     }
-    const key = agentName.toLowerCase();
-    const state = agentStates.get(key);
-    if (!state) {
+    const allocated = allocateDispatchSlot(agentName, requestedInstance);
+    if (!allocated.ok) {
       return Promise.resolve({
-        output: `Agent \"${agentName}\" not found. Available: ${Array.from(
-          agentStates.values(),
-        )
-          .map((s) => displayName(s.def.name))
-          .join(", ")}`,
+        output: allocated.message,
         exitCode: 1,
         elapsed: 0,
+        instanceId: 0,
       });
     }
-    if (state.status === "running") {
-      return Promise.resolve({
-        output: `Agent \"${displayName(state.def.name)}\" is already running. Wait for it to finish.`,
-        exitCode: 1,
-        elapsed: 0,
-      });
-    }
+    const state = allocated.state;
     state.status = "running";
     state.task = task;
     state.toolCount = 0;
@@ -662,8 +807,8 @@ export default function (pi: ExtensionAPI) {
       (ctx.model
         ? `${ctx.model.provider}/${ctx.model.id}`
         : "openrouter/google/gemini-3-flash-preview");
-    const agentKey = state.def.name.toLowerCase().replace(/\s+/g, "-");
-    const agentSessionFile = join(sessionDir, `${agentKey}.jsonl`);
+    const fk = agentFileKey(state.def);
+    const agentSessionFile = sessionPathForSpawn(state, sessionDir, fk);
     const agentSystemPrompt = buildAgentSystemPrompt(state.def);
     const { argv: extensionArgv, missing: missingExtensionSlugs } =
       resolveSubagentExtensionArgs(ctx.cwd, state.def.extensionSlugs);
@@ -780,13 +925,14 @@ export default function (pi: ExtensionAPI) {
           updateStatus(ctx);
         }
         ctx.ui.notify(
-          `${displayName(state.def.name)} ${state.status} in ${Math.round(state.elapsed / 1000)}s`,
+          `${formatInstanceLabel(state.def, state.instanceId)} ${state.status} in ${Math.round(state.elapsed / 1000)}s`,
           state.status === "done" ? "success" : "error",
         );
         resolve({
           output: full,
           exitCode: code ?? 1,
           elapsed: state.elapsed,
+          instanceId: state.instanceId,
         });
       });
       proc.on("error", (err) => {
@@ -802,6 +948,7 @@ export default function (pi: ExtensionAPI) {
           output: `Error spawning agent: ${err.message}`,
           exitCode: 1,
           elapsed: Date.now() - startTime,
+          instanceId: state.instanceId,
         });
       });
     });
@@ -810,15 +957,26 @@ export default function (pi: ExtensionAPI) {
     name: "dispatch_agent",
     label: "Dispatch Agent",
     description:
-      "Dispatch a task to a specialist agent. The agent will execute the task and return the result. Use the system prompt to see available agent names.",
+      "Dispatch a task to a specialist agent. The same agent type can run in parallel using separate instances (session files per instance). Omit instance to auto-pick a free slot or create a new one. Pass instance (1, 2, …) to pin work to a specific slot. See system prompt for agent names.",
     parameters: Type.Object({
       agent: Type.String({ description: "Agent name (case-insensitive)" }),
       task: Type.String({
         description: "Task description for the agent to execute",
       }),
+      instance: Type.Optional(
+        Type.Integer({
+          minimum: 1,
+          description:
+            "Optional instance number. Use for parallel runs or stable routing (e.g. 1 vs 2).",
+        }),
+      ),
     }),
     async execute(_toolCallId, params, _signal, onUpdate, ctx) {
-      const { agent, task } = params as { agent: string; task: string };
+      const { agent, task, instance } = params as {
+        agent: string;
+        task: string;
+        instance?: number;
+      };
       try {
         if (!isActive) {
           return {
@@ -831,6 +989,7 @@ export default function (pi: ExtensionAPI) {
             details: {
               agent,
               task,
+              instance,
               status: "error",
               elapsed: 0,
               exitCode: 1,
@@ -839,12 +998,21 @@ export default function (pi: ExtensionAPI) {
           };
         }
         if (onUpdate) {
+          const instHint =
+            instance !== undefined ? ` #${instance}` : "";
           onUpdate({
-            content: [{ type: "text", text: `Dispatching to ${agent}...` }],
-            details: { agent, task, status: "dispatching" },
+            content: [
+              { type: "text", text: `Dispatching to ${agent}${instHint}...` },
+            ],
+            details: {
+              agent,
+              task,
+              instance,
+              status: "dispatching",
+            },
           });
         }
-        const result = await dispatchAgent(agent, task, ctx);
+        const result = await dispatchAgent(agent, task, ctx, instance);
         if (result.exitCode === 0) {
           pendingAnswerAfterDispatch = true;
         }
@@ -853,12 +1021,16 @@ export default function (pi: ExtensionAPI) {
             ? result.output.slice(0, 8000) + "\n\n... [truncated]"
             : result.output;
         const status = result.exitCode === 0 ? "done" : "error";
-        const summary = `[${agent}] ${status} in ${Math.round(result.elapsed / 1000)}s`;
+        const inst =
+          result.instanceId > 0 ? ` #${result.instanceId}` : "";
+        const summary = `[${agent}${inst}] ${status} in ${Math.round(result.elapsed / 1000)}s`;
         return {
           content: [{ type: "text", text: `${summary}\n\n${truncated}` }],
           details: {
             agent,
             task,
+            instance:
+              result.instanceId > 0 ? result.instanceId : instance,
             status,
             elapsed: result.elapsed,
             exitCode: result.exitCode,
@@ -876,6 +1048,7 @@ export default function (pi: ExtensionAPI) {
           details: {
             agent,
             task,
+            instance,
             status: "error",
             elapsed: 0,
             exitCode: 1,
@@ -887,10 +1060,13 @@ export default function (pi: ExtensionAPI) {
     renderCall(args, theme) {
       const agentName = (args as any).agent || "?";
       const task = (args as any).task || "";
+      const inst = (args as any).instance;
+      const instStr =
+        inst !== undefined && inst !== null ? `#${inst} ` : "";
       const preview = task.length > 60 ? task.slice(0, 57) + "..." : task;
       return new Text(
         theme.fg("toolTitle", theme.bold("dispatch_agent ")) +
-          theme.fg("accent", agentName) +
+          theme.fg("accent", instStr + agentName) +
           theme.fg("dim", " — ") +
           theme.fg("muted", preview),
         0,
@@ -904,8 +1080,12 @@ export default function (pi: ExtensionAPI) {
         return new Text(text?.type === "text" ? text.text : "", 0, 0);
       }
       if (options.isPartial || details.status === "dispatching") {
+        const inst =
+          details.instance !== undefined && details.instance !== null
+            ? `#${details.instance} `
+            : "";
         return new Text(
-          theme.fg("accent", `● ${details.agent || "?"}`) +
+          theme.fg("accent", `● ${inst}${details.agent || "?"}`) +
             theme.fg("dim", " working..."),
           0,
           0,
@@ -917,8 +1097,12 @@ export default function (pi: ExtensionAPI) {
         typeof details.elapsed === "number"
           ? Math.round(details.elapsed / 1000)
           : 0;
+      const inst =
+        details.instance !== undefined && details.instance !== null
+          ? `#${details.instance} `
+          : "";
       const header =
-        theme.fg(color, `${icon} ${details.agent}`) +
+        theme.fg(color, `${icon} ${inst}${details.agent}`) +
         theme.fg("dim", ` ${elapsed}s`);
       if (options.expanded && details.fullOutput) {
         const output =
@@ -957,8 +1141,8 @@ export default function (pi: ExtensionAPI) {
       updateWidget();
       updateStatus(ctx);
       ctx.ui.notify(
-        `Team: ${name} — ${Array.from(agentStates.values())
-          .map((s) => displayName(s.def.name))
+        `Team: ${name} — ${flattenTeamInstances()
+          .map((s) => formatInstanceLabel(s.def, s.instanceId))
           .join(", ")}`,
         "info",
       );
@@ -971,10 +1155,10 @@ export default function (pi: ExtensionAPI) {
       if (!isActive) {
         return "Agent team is deactivated for this session.";
       }
-      const names = Array.from(agentStates.values())
+      const names = flattenTeamInstances()
         .map((s) => {
           const session = s.sessionFile ? "resumed" : "new";
-          return `${displayName(s.def.name)} (${s.status}, ${session}, runs: ${s.runCount}): ${s.def.description}`;
+          return `${formatInstanceLabel(s.def, s.instanceId)} (${s.status}, ${session}, runs: ${s.runCount}): ${s.def.description}`;
         })
         .join("\n");
       _ctx.ui.notify(names || "No agents loaded", "info");
@@ -1011,12 +1195,14 @@ export default function (pi: ExtensionAPI) {
       widgetCtx = ctx;
       isActive = false;
       pendingAnswerAfterDispatch = false;
-      for (const state of agentStates.values()) {
-        if (state.timer) {
-          clearInterval(state.timer);
-          state.timer = undefined;
+      for (const list of agentStates.values()) {
+        for (const state of list) {
+          if (state.timer) {
+            clearInterval(state.timer);
+            state.timer = undefined;
+          }
+          state.status = "disabled";
         }
-        state.status = "disabled";
       }
       const restoredTools =
         previousActiveTools && previousActiveTools.length > 0
@@ -1037,8 +1223,8 @@ export default function (pi: ExtensionAPI) {
         return "Agent team is already active for this session.";
       }
       enableAgentTeam(ctx);
-      const members = Array.from(agentStates.values())
-        .map((s) => displayName(s.def.name))
+      const members = flattenTeamInstances()
+        .map((s) => formatInstanceLabel(s.def, s.instanceId))
         .join(", ");
       ctx.ui.notify(
         `Agent team activated for this session\n` +
@@ -1060,16 +1246,19 @@ export default function (pi: ExtensionAPI) {
   pi.on("before_agent_start", async (_event, _ctx) => {
     if (!isActive) return;
     const agentCatalog = Array.from(agentStates.values())
-      .map((s) => {
+      .map((list) => {
+        const s = list[0];
+        if (!s) return "";
         const ext =
           s.def.extensionSlugs.length > 0
             ? `\n**Extensions:** ${s.def.extensionSlugs.join(", ")}`
             : "";
-        return `### ${displayName(s.def.name)}\n**Dispatch as:** \`${s.def.name}\`\n${s.def.description}\n**Tools:** ${s.def.tools}${ext}`;
+        return `### ${displayName(s.def.name)}\n**Dispatch as:** \`${s.def.name}\` (optional \`instance\`: 1, 2, … for parallel slots)\n${s.def.description}\n**Tools:** ${s.def.tools}${ext}`;
       })
+      .filter(Boolean)
       .join("\n\n");
-    const teamMembers = Array.from(agentStates.values())
-      .map((s) => displayName(s.def.name))
+    const teamMembers = (teams[activeTeamName] || [])
+      .map((m) => displayName(m))
       .join(", ");
     return {
       systemPrompt: `You are a dispatcher agent. You coordinate specialist agents to accomplish tasks.
@@ -1091,6 +1280,7 @@ You can ONLY dispatch to agents listed below. Do not attempt to dispatch to agen
 ## Rules
 - NEVER try to read, write, or execute code directly — you have no such tools
 - ALWAYS use dispatch_agent to get work done
+- The same specialist can run in parallel: each instance uses its own session file (\`{name}-1.jsonl\`, \`{name}-2.jsonl\`, …). Omit \`instance\` to auto-pick a free slot or create a new one; pass \`instance: 1\` / \`instance: 2\` when you need a stable mapping (e.g. two parallel tasks)
 - After a successful specialist dispatch, the session may open /answer automatically so the user can respond to questions in the last reply
 - When you ask multiple questions in one message (without dispatching), use execute_command with command \`/answer\` so the user gets the Q&A UI
 - You can chain agents: use scout to explore, then builder to implement
