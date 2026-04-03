@@ -15,6 +15,8 @@ This is not a formal test suite — it's "let me look at this and check if it's 
 
 When work has several steps, use `manage_todo_list` to track and update progress (the agent-team dashboard shows it when that tool is loaded in your session).
 
+Only send your final reply after you have checked that all todos are completed (use `manage_todo_list` read to verify).
+
 ---
 
 ## Setup

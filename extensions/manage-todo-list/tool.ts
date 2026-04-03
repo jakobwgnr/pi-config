@@ -85,7 +85,10 @@ Do NOT create your own JSON or markdown files to track session steps — the age
 export function createManageTodoListTool(
   state: TodoStateManager,
   onUpdate: () => void,
+  opts?: { isAgentTeamActive?: () => boolean },
 ) {
+  const teamDash = () => opts?.isAgentTeamActive?.() === true;
+
   return {
     name: "manage_todo_list",
     label: "Todo List",
@@ -156,7 +159,9 @@ export function createManageTodoListTool(
       const stats = state.getStats();
       const todos = state.read();
 
-      let message = `Todos have been modified successfully. ${stats.completed}/${stats.total} completed. Ensure that you continue to use the todo list to track your progress. Please proceed with the current tasks if applicable.`;
+      let message = teamDash()
+        ? "Todos updated. Keep using manage_todo_list to track progress and proceed with current tasks."
+        : `Todos have been modified successfully. ${stats.completed}/${stats.total} completed. Ensure that you continue to use the todo list to track your progress. Please proceed with the current tasks if applicable.`;
 
       if (todoList.length < 3) {
         message += `\n\nWarning: Small todo list (<3 items). This task might not need a todo list.`;
@@ -208,9 +213,10 @@ export function createManageTodoListTool(
         return new Text(theme.fg("dim", "No todos"), 0, 0);
       }
 
-      let text =
-        theme.fg("success", "✓ ") +
-        theme.fg("muted", `${completed}/${total} completed`);
+      let text = teamDash()
+        ? theme.fg("dim", "Todos synced")
+        : theme.fg("success", "✓ ") +
+          theme.fg("muted", `${completed}/${total} completed`);
 
       if (expanded) {
         for (const todo of todos) {

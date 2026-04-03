@@ -130,11 +130,18 @@ interface TodoItem {
   status: TodoStatus;
 }
 
+/** Match manage-todo-list widget / tool icons. */
 const TODO_STATUS_ICONS: Record<TodoStatus, string> = {
   completed: "✓",
-  "in-progress": "◉",
+  "in-progress": "◉ ",
   "not-started": "○",
 };
+
+const AGENT_TEAM_ACTIVE_CHANNEL = "agent-team:active";
+
+function emitAgentTeamActive(pi: ExtensionAPI, active: boolean) {
+  pi.events.emit(AGENT_TEAM_ACTIVE_CHANNEL, { active });
+}
 
 function isValidTodoStatus(s: unknown): s is TodoStatus {
   return (
@@ -836,16 +843,10 @@ export default function (pi: ExtensionAPI) {
         lines.push("");
         continue;
       }
+      const innerW = Math.max(1, width - 2);
       for (const t of todos) {
-        const icon = TODO_STATUS_ICONS[t.status];
-        const rowColor =
-          t.status === "completed"
-            ? "dim"
-            : t.status === "in-progress"
-              ? "warning"
-              : "muted";
-        const row = `  ${icon} ${t.id}. ${t.title}`;
-        lines.push(theme.fg(rowColor, truncateToWidth(row, width)));
+        const { line } = formatTodoRowLine(t, innerW, theme);
+        lines.push(truncateToWidth(`  ${line}`, width));
       }
       lines.push("");
     }
@@ -952,6 +953,42 @@ export default function (pi: ExtensionAPI) {
     if (text.length <= width) return text;
     if (width <= 3) return ".".repeat(width);
     return text.slice(0, width - 3) + "...";
+  }
+
+  /** Per-segment colors aligned with manage-todo-list tool/widget. */
+  function formatTodoRowLine(
+    item: TodoItem,
+    contentWidth: number,
+    theme: {
+      fg: (name: string, s: string) => string;
+      strikethrough?: (s: string) => string;
+    },
+  ): { line: string; visibleLen: number } {
+    const iconChar = TODO_STATUS_ICONS[item.status];
+    const iconStyled =
+      item.status === "completed"
+        ? theme.fg("success", iconChar)
+        : item.status === "in-progress"
+          ? theme.fg("warning", iconChar)
+          : theme.fg("dim", iconChar);
+    const idStyled = theme.fg("accent", `${item.id}.`);
+    const gap = " ";
+    const prefix = iconStyled + gap + idStyled + gap;
+    const prefixVis = visibleWidth(prefix);
+    const titleBudget = Math.max(1, contentWidth - prefixVis);
+    const titlePlain = truncateLine(item.title, titleBudget);
+    const struck =
+      item.status === "completed"
+        ? theme.strikethrough?.(titlePlain) ?? titlePlain
+        : titlePlain;
+    const titleStyled =
+      item.status === "completed"
+        ? theme.fg("dim", struck)
+        : item.status === "in-progress"
+          ? theme.fg("warning", titlePlain)
+          : theme.fg("muted", titlePlain);
+    const line = prefix + titleStyled;
+    return { line, visibleLen: visibleWidth(line) };
   }
   function wrapText(text: string, width: number, maxLines: number): string[] {
     if (width <= 0 || maxLines <= 0) return [];
@@ -1112,17 +1149,8 @@ export default function (pi: ExtensionAPI) {
       const cw = w - 1;
       const strip = pickTodoStripItems(todos);
       for (const item of strip) {
-        const icon = TODO_STATUS_ICONS[item.status];
-        const rowColor =
-          item.status === "completed"
-            ? "dim"
-            : item.status === "in-progress"
-              ? "warning"
-              : "muted";
-        const text = truncateLine(`${icon} ${item.id}. ${item.title}`, cw);
-        lines.push(
-          border(" " + theme.fg(rowColor, text), 1 + text.length),
-        );
+        const { line, visibleLen } = formatTodoRowLine(item, cw, theme);
+        lines.push(border(" " + line, 1 + visibleLen));
       }
     }
     const botLine =
@@ -1236,6 +1264,7 @@ export default function (pi: ExtensionAPI) {
     updateStatus(ctx);
     updateWidget();
     setFooter(ctx);
+    emitAgentTeamActive(pi, true);
   }
 
   /** After main session switch/fork: new subagent directory without changing tool registration. */
@@ -1809,6 +1838,7 @@ export default function (pi: ExtensionAPI) {
       pi.setActiveTools(restoredTools);
       clearWidgetAndFooter(ctx);
       updateStatus(ctx);
+      emitAgentTeamActive(pi, false);
       ctx.ui.notify("Agent team deactivated for this session", "info");
       return "Agent team deactivated for this session.";
     },

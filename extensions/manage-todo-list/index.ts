@@ -9,21 +9,33 @@ import { TodoStateManager } from "./state-manager";
 import { createManageTodoListTool } from "./tool";
 import { updateWidget, clearWidget } from "./ui/todo-widget";
 
+const AGENT_TEAM_ACTIVE_CHANNEL = "agent-team:active";
+
 export default function (pi: ExtensionAPI) {
   const state = new TodoStateManager();
 
   let currentCtx: ExtensionContext | undefined;
+  let agentTeamActive = false;
+
+  pi.events.on(AGENT_TEAM_ACTIVE_CHANNEL, (data: unknown) => {
+    const o = data as { active?: boolean };
+    agentTeamActive = o?.active === true;
+    if (currentCtx) {
+      state.loadFromSession(currentCtx);
+      updateWidget(state, currentCtx, { agentTeamActive });
+    }
+  });
 
   const onTodoUpdate = () => {
     if (currentCtx) {
-      updateWidget(state, currentCtx);
+      updateWidget(state, currentCtx, { agentTeamActive });
     }
   };
 
   const reconstructState = (ctx: ExtensionContext) => {
     currentCtx = ctx;
     state.loadFromSession(ctx);
-    updateWidget(state, ctx);
+    updateWidget(state, ctx, { agentTeamActive });
   };
 
   pi.on("session_start", async (_event, ctx) => reconstructState(ctx));
@@ -38,10 +50,12 @@ export default function (pi: ExtensionAPI) {
   pi.on("turn_end", async (_event, ctx) => {
     currentCtx = ctx;
     state.loadFromSession(ctx);
-    updateWidget(state, ctx);
+    updateWidget(state, ctx, { agentTeamActive });
   });
 
-  const tool = createManageTodoListTool(state, onTodoUpdate);
+  const tool = createManageTodoListTool(state, onTodoUpdate, {
+    isAgentTeamActive: () => agentTeamActive,
+  });
   pi.registerTool(tool);
 
   pi.registerCommand("todos", {
@@ -64,9 +78,11 @@ export default function (pi: ExtensionAPI) {
           "info",
         );
       } else {
-        updateWidget(state, ctx);
+        updateWidget(state, ctx, { agentTeamActive });
         ctx.ui.notify(
-          `${state.getStats().completed}/${state.getStats().total} todos completed.`,
+          agentTeamActive
+            ? "Todo list shown (progress is on the team dashboard)."
+            : `${state.getStats().completed}/${state.getStats().total} todos completed.`,
           "info",
         );
       }

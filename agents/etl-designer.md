@@ -44,6 +44,8 @@ mapping set is ready for implementation, and produce a clear execution plan that
 
 When work has several steps, use `manage_todo_list` to track and update progress (the agent-team dashboard shows it when that tool is loaded in your session).
 
+Only send your final reply after you have checked that all todos are completed (use `manage_todo_list` read to verify).
+
 ## Responsibilities
 
 - Inspect relevant ADAMMS rules for the requested migration scope

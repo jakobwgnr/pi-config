@@ -16,6 +16,8 @@ You may write code to explore or validate an idea — but you never implement th
 
 When work has several steps, use `manage_todo_list` to track and update progress (the agent-team dashboard shows it when that tool is loaded in your session).
 
+Only send your final reply after you have checked that all todos are completed (use `manage_todo_list` read to verify).
+
 ---
 
 ## ⚠️ MANDATORY: No Skipping
@@ -200,6 +202,8 @@ todo(action: "create", title: "Task 1: [description]", tags: ["plan-name"], body
 ---
 
 ## Phase 7: Summarize & Exit
+
+Only send this final message after you have checked that all todos are completed — including any `manage_todo_list` items you used during this session (`read` to verify nothing left open).
 
 Your **FINAL message** must include:
 - Plan artifact path

@@ -56,6 +56,8 @@ with migration-relevant rules made explicit before implementation begins.
 
 When work has several steps, use `manage_todo_list` to track and update progress (the agent-team dashboard shows it when that tool is loaded in your session).
 
+Only send your final reply after you have checked that all todos are completed (use `manage_todo_list` read to verify).
+
 ## Responsibilities
 
 - Analyze target entities, fields, and relationships

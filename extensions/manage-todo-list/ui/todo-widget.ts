@@ -17,6 +17,7 @@ export const STATUS_ICONS: Record<TodoStatus, string> = {
 export function updateWidget(
   state: TodoStateManager,
   ctx: ExtensionContext,
+  options?: { agentTeamActive?: boolean },
 ): void {
   const todos = state.read();
 
@@ -26,13 +27,15 @@ export function updateWidget(
   }
 
   const stats = state.getStats();
+  const hideHeaderProgress = options?.agentTeamActive === true;
 
   ctx.ui.setWidget(WIDGET_ID, (_tui, theme) => {
     const lines: string[] = [];
 
-    const header =
-      theme.fg("accent", " Todo List ") +
-      theme.fg("muted", `— ${stats.completed}/${stats.total} completed`);
+    const header = hideHeaderProgress
+      ? theme.fg("accent", " Todo List ")
+      : theme.fg("accent", " Todo List ") +
+        theme.fg("muted", `— ${stats.completed}/${stats.total} completed`);
     lines.push(header);
 
     for (const todo of todos) {
