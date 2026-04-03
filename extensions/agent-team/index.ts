@@ -34,7 +34,6 @@ import { spawn } from "child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "fs";
 import { homedir } from "os";
 import { join, resolve, sep } from "path";
-import { parse as parseYaml } from "yaml";
 
 // ── Types ────────────────────────────────────────
 
@@ -192,25 +191,103 @@ function normalizeTeamMember(
   };
 }
 
-function parseTeamsFile(raw: string): Record<string, TeamMemberSpec[]> {
-  let doc: unknown;
-  try {
-    doc = parseYaml(raw);
-  } catch {
-    return {};
+/** Parse a scalar from `key: value` (quoted strings, integers). */
+function parseTeamsYamlScalar(raw: string): string | number {
+  const v = raw.trim();
+  if (
+    (v.startsWith('"') && v.endsWith('"')) ||
+    (v.startsWith("'") && v.endsWith("'"))
+  ) {
+    return v.slice(1, -1);
   }
-  if (!doc || typeof doc !== "object" || Array.isArray(doc)) return {};
+  if (/^-?\d+$/.test(v)) return parseInt(v, 10);
+  if (/^-?\d+\.\d+$/.test(v)) return parseFloat(v);
+  return v;
+}
+
+/**
+ * Dependency-free parser for team files: 2-space list items, 4-space object keys.
+ * Matches this repo’s teams.yaml so the extension loads without `node_modules/yaml`
+ * (e.g. when installed under ~/.pi/agent/extensions/).
+ */
+function parseTeamsYamlBuiltin(raw: string): Record<string, TeamMemberSpec[]> {
+  const lines = raw.split(/\r?\n/);
   const teams: Record<string, TeamMemberSpec[]> = {};
-  for (const [teamName, members] of Object.entries(doc)) {
-    if (!Array.isArray(members)) continue;
-    const specs: TeamMemberSpec[] = [];
-    for (let i = 0; i < members.length; i++) {
-      const spec = normalizeTeamMember(members[i], i);
-      if (spec) specs.push(spec);
+  let currentTeam: string | null = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i]!;
+    const hash = rawLine.indexOf("#");
+    const line = (hash >= 0 ? rawLine.slice(0, hash) : rawLine).replace(
+      /\s+$/,
+      "",
+    );
+
+    if (!line.trim()) continue;
+
+    const indent = line.length - line.trimStart().length;
+    const trimmed = line.trim();
+
+    if (indent === 0 && trimmed.endsWith(":") && !trimmed.startsWith("-")) {
+      currentTeam = trimmed.slice(0, -1).trim();
+      teams[currentTeam] = [];
+      continue;
     }
-    teams[teamName] = specs;
+
+    if (currentTeam === null) continue;
+
+    if (indent === 2 && trimmed.startsWith("- ")) {
+      const rest = trimmed.slice(2).trim();
+      const bucket = teams[currentTeam]!;
+
+      if (!rest.includes(":")) {
+        const spec = normalizeTeamMember(rest, bucket.length);
+        if (spec) bucket.push(spec);
+        continue;
+      }
+
+      const obj: Record<string, unknown> = {};
+      const eq0 = rest.indexOf(":");
+      const k0 = rest.slice(0, eq0).trim();
+      const v0 = rest.slice(eq0 + 1).trim();
+      obj[k0] = parseTeamsYamlScalar(v0);
+
+      i++;
+      while (i < lines.length) {
+        const rl = lines[i]!;
+        const h = rl.indexOf("#");
+        const L = (h >= 0 ? rl.slice(0, h) : rl).replace(/\s+$/, "");
+        if (!L.trim()) {
+          i++;
+          continue;
+        }
+        const d = L.length - L.trimStart().length;
+        if (d < 4) {
+          i--;
+          break;
+        }
+        const t = L.trim();
+        const eq = t.indexOf(":");
+        if (eq === -1) {
+          i++;
+          continue;
+        }
+        const k = t.slice(0, eq).trim();
+        const v = t.slice(eq + 1).trim();
+        obj[k] = parseTeamsYamlScalar(v);
+        i++;
+      }
+
+      const spec = normalizeTeamMember(obj, bucket.length);
+      if (spec) bucket.push(spec);
+    }
   }
+
   return teams;
+}
+
+function parseTeamsFile(raw: string): Record<string, TeamMemberSpec[]> {
+  return parseTeamsYamlBuiltin(raw);
 }
 
 function ansiTruecolorFg(hex: string): string | null {

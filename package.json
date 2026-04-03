@@ -11,7 +11,6 @@
     "@mariozechner/pi-tui": "^0.64.0"
   },
   "dependencies": {
-    "@mariozechner/pi-coding-agent": "^0.64.0",
-    "yaml": "^2.8.2"
+    "@mariozechner/pi-coding-agent": "^0.64.0"
   }
 }
