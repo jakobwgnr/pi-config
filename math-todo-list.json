@@ -1,7 +1,0 @@
-[
-  {"id": "riddle-1", "task": "What is 7 + 3?", "status": "closed", "answer": 10},
-  {"id": "riddle-2", "task": "What is 12 - 4?", "status": "closed", "answer": 8},
-  {"id": "riddle-3", "task": "What is 6 × 2?", "status": "closed", "answer": 12},
-  {"id": "riddle-4", "task": "What is 15 ÷ 3?", "status": "closed", "answer": 5},
-  {"id": "riddle-5", "task": "What is the square root of 36?", "status": "closed", "answer": 6}
-]
