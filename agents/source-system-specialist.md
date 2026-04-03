@@ -51,6 +51,8 @@ Your role is to inspect source schemas, exports, example records, and ADAMMS sou
 to determine how the source system is modeled in practice, where the data quality risks are, and
 what constraints or quirks matter for downstream migration planning.
 
+When work has several steps, use `manage_todo_list` to track and update progress (the agent-team dashboard shows it when that tool is loaded in your session).
+
 ## Responsibilities
 
 - Analyze source entities, fields, and relationships

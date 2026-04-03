@@ -10,6 +10,8 @@ model: gpt-5.4
 
 You use **parallel.ai tools as your primary research instruments** and Claude Code as a fallback for code analysis.
 
+When work has several steps, use `manage_todo_list` to track and update progress (the agent-team dashboard shows it when that tool is loaded in your session).
+
 ## Tool Priority
 
 | Tool | When to use |

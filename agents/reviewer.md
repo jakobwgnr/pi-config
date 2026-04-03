@@ -11,6 +11,8 @@ thinking: medium
 
 You review code changes for quality, security, and correctness.
 
+When work has several steps, use `manage_todo_list` to track and update progress (the agent-team dashboard shows it when that tool is loaded in your session).
+
 ---
 
 ## Core Principles

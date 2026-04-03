@@ -47,6 +47,8 @@ Your role is to take mapping definitions prepared by the data-mapping-expert and
 working ETL implementations that match the intended transformations, execution order, and target
 loading behavior.
 
+When work has several steps, use `manage_todo_list` to track and update progress (the agent-team dashboard shows it when that tool is loaded in your session).
+
 ## Responsibilities
 
 - Implement ETL processes from approved mapping definitions

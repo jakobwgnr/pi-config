@@ -31,7 +31,13 @@ import {
 } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { spawn } from "child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+} from "fs";
 import { homedir } from "os";
 import { join, resolve, sep } from "path";
 
@@ -109,6 +115,70 @@ function sessionPathForSpawn(
   const numbered = join(sessionDir, `${fileKey}-${state.instanceId}.jsonl`);
   if (state.sessionFile) return state.sessionFile;
   return numbered;
+}
+
+// ── Subagent todos (manage_todo_list / pi-manage-todo-list) ─────────────
+// Specialists must load an extension that registers `manage_todo_list`; the
+// latest toolResult.details.todos in their session JSONL is read here.
+
+type TodoStatus = "not-started" | "in-progress" | "completed";
+
+interface TodoItem {
+  id: number;
+  title: string;
+  description: string;
+  status: TodoStatus;
+}
+
+const TODO_STATUS_ICONS: Record<TodoStatus, string> = {
+  completed: "✓",
+  "in-progress": "◉",
+  "not-started": "○",
+};
+
+function isValidTodoStatus(s: unknown): s is TodoStatus {
+  return (
+    s === "not-started" || s === "in-progress" || s === "completed"
+  );
+}
+
+function isValidTodoItem(x: unknown): x is TodoItem {
+  if (!x || typeof x !== "object") return false;
+  const o = x as Record<string, unknown>;
+  return (
+    typeof o.id === "number" &&
+    typeof o.title === "string" &&
+    typeof o.description === "string" &&
+    isValidTodoStatus(o.status)
+  );
+}
+
+/** Last manage_todo_list write/read in file, or null if none / unreadable. */
+function parseLatestTodosFromSessionJsonl(raw: string): TodoItem[] | null {
+  let last: TodoItem[] | null = null;
+  for (const line of raw.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    let rec: unknown;
+    try {
+      rec = JSON.parse(line) as unknown;
+    } catch {
+      continue;
+    }
+    if (!rec || typeof rec !== "object") continue;
+    const r = rec as Record<string, unknown>;
+    if (r.type !== "message" || !r.message || typeof r.message !== "object")
+      continue;
+    const msg = r.message as Record<string, unknown>;
+    if (msg.role !== "toolResult" || msg.toolName !== "manage_todo_list")
+      continue;
+    const details = msg.details;
+    if (!details || typeof details !== "object") continue;
+    const todos = (details as Record<string, unknown>).todos;
+    if (!Array.isArray(todos)) continue;
+    const cleaned = todos.filter(isValidTodoItem);
+    last = cleaned;
+  }
+  return last;
 }
 
 // ── Display Name Helper ──────────────────────────
@@ -509,6 +579,78 @@ export default function (pi: ExtensionAPI) {
   let teamsSource = "generated default team";
   /** After successful dispatch_agent, open /answer on parent session at agent_end (hasUI). */
   let pendingAnswerAfterDispatch = false;
+  let widgetView: "cards" | "todos" = "cards";
+
+  const todoSessionCache = new Map<
+    string,
+    { mtimeMs: number; size: number; value: TodoItem[] | null }
+  >();
+
+  function readTodosForAgentSession(absPath: string): TodoItem[] | null {
+    if (!existsSync(absPath)) return null;
+    let st;
+    try {
+      st = statSync(absPath);
+    } catch {
+      return null;
+    }
+    const cached = todoSessionCache.get(absPath);
+    if (
+      cached &&
+      cached.mtimeMs === st.mtimeMs &&
+      cached.size === st.size
+    ) {
+      return cached.value;
+    }
+    let raw: string;
+    try {
+      raw = readFileSync(absPath, "utf-8");
+    } catch {
+      todoSessionCache.set(absPath, {
+        mtimeMs: st.mtimeMs,
+        size: st.size,
+        value: null,
+      });
+      return null;
+    }
+    const value = parseLatestTodosFromSessionJsonl(raw);
+    todoSessionCache.set(absPath, {
+      mtimeMs: st.mtimeMs,
+      size: st.size,
+      value,
+    });
+    return value;
+  }
+
+  function getTodosForState(state: AgentInstanceState): TodoItem[] | null {
+    const fk = agentFileKey(state.def);
+    const path = sessionPathForSpawn(state, sessionDir, fk);
+    return readTodosForAgentSession(path);
+  }
+
+  function todoHeaderSuffix(todos: TodoItem[] | null): string {
+    if (todos == null || todos.length === 0) {
+      return " · no TODOs assigned";
+    }
+    const done = todos.filter((t) => t.status === "completed").length;
+    return ` · ${done} of ${todos.length} TODOs done`;
+  }
+
+  function pickTodoStripItems(
+    todos: TodoItem[],
+  ): [TodoItem | null, TodoItem | null, TodoItem | null] {
+    let lastCompleted: TodoItem | null = null;
+    for (let i = 0; i < todos.length; i++) {
+      if (todos[i]!.status === "completed") {
+        lastCompleted = todos[i]!;
+      }
+    }
+    const inProgress =
+      todos.find((t) => t.status === "in-progress") ?? null;
+    const next =
+      todos.find((t) => t.status === "not-started") ?? null;
+    return [lastCompleted, inProgress, next];
+  }
 
   function loadAgents(ctx: ExtensionContext) {
     const sessionId = ctx.sessionManager.getSessionId();
@@ -625,6 +767,41 @@ export default function (pi: ExtensionAPI) {
       if (ka !== 0) return ka;
       return a.instanceId - b.instanceId;
     });
+  }
+
+  function renderTodosOverview(width: number, theme: any): string[] {
+    const ordered = flattenTeamInstances();
+    const lines: string[] = [];
+    for (const state of ordered) {
+      const todos = getTodosForState(state);
+      const label = formatInstanceLabel(state);
+      const model = state.def.model ? ` [${state.def.model}]` : "";
+      const head = truncateToWidth(`${label}${model}`, width);
+      lines.push(theme.fg("accent", theme.bold(head)));
+      if (todos == null || todos.length === 0) {
+        lines.push(
+          theme.fg("dim", truncateToWidth("  (no TODOs assigned)", width)),
+        );
+        lines.push("");
+        continue;
+      }
+      for (const t of todos) {
+        const icon = TODO_STATUS_ICONS[t.status];
+        const rowColor =
+          t.status === "completed"
+            ? "dim"
+            : t.status === "in-progress"
+              ? "warning"
+              : "muted";
+        const row = `  ${icon} ${t.id}. ${t.title}`;
+        lines.push(theme.fg(rowColor, truncateToWidth(row, width)));
+      }
+      lines.push("");
+    }
+    if (lines.length === 0) {
+      return [theme.fg("dim", truncateToWidth("No agents", width))];
+    }
+    return lines;
   }
 
   function availableAgentNamesForError(): string {
@@ -834,11 +1011,12 @@ export default function (pi: ExtensionAPI) {
         ? customFg + top + ANSI_RESET
         : theme.fg(topBorderColor, top);
     const lines = [topLine];
+    const todos = getTodosForState(state);
     const modelSuffix = state.def.model ? ` [${state.def.model}]` : "";
     const headerLabel =
       state.teamCardName?.trim() || displayName(state.def.name);
     const nameText = truncateToWidth(
-      `${headerLabel} #${state.instanceId}${modelSuffix}`,
+      `${headerLabel} #${state.instanceId}${modelSuffix}${todoHeaderSuffix(todos)}`,
       Math.max(1, w - 1),
     );
     const headerContent =
@@ -872,6 +1050,32 @@ export default function (pi: ExtensionAPI) {
       lines.push(
         border(" " + theme.fg("success", promptText), 1 + promptText.length),
       );
+    }
+    if (todos != null && todos.length > 0) {
+      const sepInner = "├" + "─".repeat(w) + "┤";
+      lines.push(
+        customFg != null
+          ? customFg + sepInner + ANSI_RESET
+          : theme.fg(topBorderColor, sepInner),
+      );
+      const cw = w - 1;
+      const [doneItem, progItem, nextItem] = pickTodoStripItems(todos);
+      const pushTodoRow = (item: TodoItem) => {
+        const icon = TODO_STATUS_ICONS[item.status];
+        const rowColor =
+          item.status === "completed"
+            ? "dim"
+            : item.status === "in-progress"
+              ? "warning"
+              : "muted";
+        const text = truncateLine(`${icon} ${item.id}. ${item.title}`, cw);
+        lines.push(
+          border(" " + theme.fg(rowColor, text), 1 + text.length),
+        );
+      };
+      if (doneItem) pushTodoRow(doneItem);
+      if (progItem) pushTodoRow(progItem);
+      if (nextItem) pushTodoRow(nextItem);
     }
     const botLine =
       customFg != null
@@ -933,6 +1137,11 @@ export default function (pi: ExtensionAPI) {
                 "No agents found. Add .md files to agents/, .pi/agents/, or ~/.pi/agent/agents/",
               ),
             );
+            return text.render(width);
+          }
+          if (widgetView === "todos") {
+            const overview = renderTodosOverview(width, theme);
+            text.setText(overview.join("\n").concat("\n"));
             return text.render(width);
           }
           const ordered = flattenTeamInstances();
@@ -1507,6 +1716,27 @@ export default function (pi: ExtensionAPI) {
       } else {
         _ctx.ui.notify("Usage: /agents-grid <1-6>", "error");
       }
+    },
+  });
+  pi.registerCommand("agents-team:switch-view", {
+    description: "Toggle team widget: agent cards vs all TODOs by agent",
+    handler: async (_args, _ctx) => {
+      widgetCtx = _ctx;
+      if (!isActive) {
+        _ctx.ui.notify(
+          "Agent team is deactivated for this session.",
+          "warning",
+        );
+        return;
+      }
+      widgetView = widgetView === "cards" ? "todos" : "cards";
+      updateWidget();
+      _ctx.ui.notify(
+        widgetView === "cards"
+          ? "Team widget: card view"
+          : "Team widget: TODOs view (by agent)",
+        "info",
+      );
     },
   });
   pi.registerCommand("agents-team:deactivate", {

@@ -42,6 +42,8 @@ Your role is to gather the relevant rule information through adamms-cli, determi
 mapping set is ready for implementation, and produce a clear execution plan that the
 `etl-developer` agent can follow.
 
+When work has several steps, use `manage_todo_list` to track and update progress (the agent-team dashboard shows it when that tool is loaded in your session).
+
 ## Responsibilities
 
 - Inspect relevant ADAMMS rules for the requested migration scope

@@ -11,6 +11,8 @@ thinking: minimal
 
 You are a senior engineer picking up a well-scoped task. The planning is done — your job is to implement it with quality and care.
 
+When work has several steps, use `manage_todo_list` to track and update progress (the agent-team dashboard shows it when that tool is loaded in your session).
+
 ---
 
 ## Engineering Standards

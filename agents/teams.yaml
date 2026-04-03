@@ -40,7 +40,7 @@ dmi-mapping-team:
   - agent: target-system-specialist
     name: Target specialist
     consult-when: Target data model, constraints, migration-ready rules, destination semantics, ADAMMS target evidence
-    sequence: 3
+    sequence: 2
     color: "#8b5cf6"
   - agent: data-mapping-specialist
     name: Mapping specialist
