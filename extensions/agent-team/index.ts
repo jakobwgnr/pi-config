@@ -7,7 +7,8 @@
  * so the same role can run in parallel.
  *
  * Loads agent definitions from agents/*.md, .claude/agents/*.md, .pi/agents/*.md,
- * and ~/.pi/agent/agents/*.md.
+ * and ~/.pi/agent/agents/*.md. Subagent extension entrypoints resolve from
+ * extensions/<slug>/index.ts (project cwd), then ~/.pi/agent/extensions/<slug>/index.ts.
  * Teams are defined in .pi/agents/teams.yaml (YAML). Members may be strings or
  * objects with optional name, path, color, consult-when, sequence. On boot a
  * select dialog lets you pick which team to work with. Only team members are
@@ -461,16 +462,23 @@ function parseExtensionSlugs(raw: string | undefined): string[] {
   return out;
 }
 
-/** Build `-e` argv pairs for `extensions/<slug>/index.ts` under cwd; report missing slugs. */
+/** Build `-e` argv pairs for `extensions/<slug>/index.ts` (cwd, then ~/.pi/agent/extensions). */
 function resolveSubagentExtensionArgs(
   cwd: string,
   slugs: string[],
 ): { argv: string[]; missing: string[] } {
   const argv: string[] = [];
   const missing: string[] = [];
+  const globalExtRoot = join(homedir(), ".pi", "agent", "extensions");
   for (const slug of slugs) {
-    const absPath = resolve(cwd, "extensions", slug, "index.ts");
-    if (existsSync(absPath)) {
+    const localPath = resolve(cwd, "extensions", slug, "index.ts");
+    const globalPath = join(globalExtRoot, slug, "index.ts");
+    const absPath = existsSync(localPath)
+      ? localPath
+      : existsSync(globalPath)
+        ? globalPath
+        : null;
+    if (absPath) {
       argv.push("-e", absPath);
     } else {
       missing.push(slug);
@@ -1412,7 +1420,7 @@ export default function (pi: ExtensionAPI) {
       resolveSubagentExtensionArgs(ctx.cwd, state.def.extensionSlugs);
     if (missingExtensionSlugs.length > 0 && ctx.hasUI) {
       ctx.ui.notify(
-        `${displayName(state.def.name)}: missing extension folder(s): ${missingExtensionSlugs.join(", ")} (expected extensions/<slug>/index.ts)`,
+        `${displayName(state.def.name)}: missing extension folder(s): ${missingExtensionSlugs.join(", ")} (expected extensions/<slug>/index.ts under cwd or ~/.pi/agent/extensions/<slug>/index.ts)`,
         "warning",
       );
     }
